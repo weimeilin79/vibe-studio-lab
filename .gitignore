@@ -43,3 +43,16 @@ web/dist/
 vibestudio/web/node_modules/
 vibestudio/web/dist/
 vibestudio/runs/
+
+# generated media: never commit a render, a thumbnail, or an avatar
+*.mp4
+*.mov
+*.webm
+*.mkv
+*.avi
+runs/media/
+
+# build artifacts and OS files
+node_modules/
+*.tsbuildinfo
+.DS_Store

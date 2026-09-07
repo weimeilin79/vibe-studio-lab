@@ -370,8 +370,8 @@ export const DEFAULT_IDEA = "a tiny robot doing laundry at midnight";
 
 const READER_CODE = `# agent/graph.py
 def scan_trends(node_input):
-    from world import platform
-    return Event(output={"trends": platform.trends()})   # ten of 250, at random
+    from .trends import sample_trends
+    return Event(output={"trends": sample_trends()})     # ten of 250, at random
 
 
 def read_backlog(node_input):

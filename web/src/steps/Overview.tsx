@@ -283,7 +283,7 @@ export function Overview() {
                 <span className="text-sm font-semibold group-hover:text-fg">{s.label}</span>
               </div>
               <div className="mt-2 font-mono text-[10px] text-fg-muted">
-                {i < 3 ? "Part 1 · Workflow graph design" : i < 7 ? "Part 2 · Memory, knowledge, and the world" : "Wrap-up"}
+                {i < 3 ? "Part 1 · Workflow graph design" : i < 8 ? "Part 2 · Memory, knowledge, and the video" : "Wrap-up"}
               </div>
             </Link>
           ))}

@@ -11,7 +11,7 @@ feedback link: https://github.com/cuppibla/vibe-studio-lab/issues
 ## Introduction
 Duration: 0:03:00
 
-![The studio while a job is pending: the process is idle and the state is on disk](img/hero.gif)
+![Vibe Studio](img/hero.gif)
 
 This codelab is about agentic workflow design with the Agent Development Kit (ADK). You will learn how to express a multi-step agent system as an explicit graph rather than a single prompt, how to keep that graph's state outside the process so a run survives a restart, and how to connect the graph to managed services for memory, retrieval, and video generation.
 
@@ -21,7 +21,7 @@ You run a channel on VibeTube. You have a backlog of video ideas and no time for
 
 The remaining problem is process. You need a pipeline that runs the routine steps without supervision, asks you only for the decisions that require your judgment, refuses an unpublishable direction before it costs money, and carries what one video taught it into the next. A pipeline with those properties is repeatable and auditable, and you can hand it to another creator. That pipeline is what you build in this codelab. The application it powers is called Vibe Studio.
 
-![The production pipeline](img/d10-productionline.png)
+![The workflow you build, from an idea to a published clip](img/d10-productionline.svg)
 
 ### What you learn
 
@@ -58,7 +58,7 @@ The graph you build follows five rules. Each section returns to the rule it demo
 ## Setup
 Duration: 0:09:00
 
-![Vibe Studio architecture: frontend, backend, inspector, cloud](img/d5-architecture.png)
+![What runs where: the learning center, your backend, and the GEAP services](img/d5-architecture.svg)
 
 Three parts make up the environment. The **learning center** (left) serves the step pages, the file editor, and the embedded ADK development UI. **Your backend** (middle) is one `Workflow` whose nodes live in `agent/`, plus a set of sandbox applications that each wire a subset of that graph. **Google Cloud** (right) provides Gemini for the agents, Memory Bank, RAG Engine, and Veo, all through GEAP.
 
@@ -249,7 +249,7 @@ The readers are plain Python functions. A function node receives `node_input`, t
 
 ### Parallel branches and the join
 
-![The research fan-out: two readers from START into a join](img/stage-1-fanout.png)
+![The research fan-out: two readers from START into a join](img/stage-1-fanout.svg)
 
 `JoinNode` is an ADK built-in that waits until every incoming branch has reported, then emits one dict keyed by node name. It needs only a name.
 
@@ -272,7 +272,7 @@ This shape is also what makes the graph extensible. The finished workflow has th
 
 ### An agent as a node
 
-![The proposer and the human input node after the join](img/stage-2-direction.png)
+![The proposer and the human input node after the join](img/stage-2-direction.svg)
 
 `propose_directions` is the same `Agent` class as the previous step, with a name, a model, an instruction, and an output schema, and with no tools.
 
@@ -397,7 +397,7 @@ Output and state serve different purposes. Output travels to the next node only.
 
 ### Routers
 
-![The policy gate: a router with two labeled exits](img/stage-3-router.png)
+![The policy gate: a router with two labeled exits](img/stage-3-router.svg)
 
 A router is a function node whose `Event` carries a route name beside its output.
 
