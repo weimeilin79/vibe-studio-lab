@@ -21,15 +21,13 @@ propose_directions = Agent(
     name="propose_directions",
     model=config.MODEL,
     instruction=PROPOSE_INSTRUCTION,
-    output_schema=Directions,
-    before_model_callback=recall_taste)
+    output_schema=Directions)  # TODO: MEMORY_RECALL - add before_model_callback=recall_taste
 
 scripter = Agent(
     name="scripter",
     model=config.MODEL,
     instruction=SCRIPT_INSTRUCTION,
-    output_schema=Script,
-    after_agent_callback=remember_pick)
+    output_schema=Script)  # TODO: MEMORY_REMEMBER - add after_agent_callback=remember_pick
 
 quarantine = Agent(
     name="quarantine",

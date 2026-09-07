@@ -8,6 +8,7 @@
 #   • the APIs this lab calls, enabled on that project
 #   • a .env that sends every model call to GEAP with your own credentials
 #   • one real Gemini call, proven, before any step depends on it
+#   • the editable files in the state students receive, on a first setup only
 #   • the learning center built and running in the background on port 4600
 #
 # It asks two questions, the room's event code and the name the room credits
@@ -247,8 +248,29 @@ r = client.models.generate_content(model=model, contents="Reply with exactly: vi
 print(f"  ✓ {model}:", (r.text or "").strip()[:60])
 PY
 
-# ── 6 · the learning center: build the page, start the server in the background ──
-say "5 · The learning center"
+# ── 6 · the state students receive ──────────────────────────────────────────
+# A first setup carves the editable files back to their TODO form and clears
+# any run state, so the lab starts where a student starts. A later run leaves
+# your files alone: re-running this script must never discard your work.
+say "5 · Starting state"
+MARKER="runs/.setup_done"
+if [ -f "$MARKER" ]; then
+    info "your files are left as they are (this is not the first setup)"
+    info "to reset the lab to the state students receive: scripts/starter.sh"
+else
+    # scripts/starter.sh cannot clear the session store while a server holds the port
+    RUNNING="$(lsof -a -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null || true)"
+    if [ -n "$RUNNING" ]; then
+        info "stopping the learning center on port $PORT so the session store can be cleared"
+        for pid in $RUNNING; do kill "$pid" 2>/dev/null || true; done
+        sleep 1
+    fi
+    scripts/starter.sh
+    tick "the editable files hold their TODO lines, and no run state is left over"
+fi
+
+# ── 7 · the learning center: build the page, start the server in the background ──
+say "6 · The learning center"
 mkdir -p runs
 (cd web && ([ -d node_modules ] || npm install --no-fund --no-audit >/dev/null 2>&1) && npm run build >/dev/null 2>&1) || die \
     "The page did not build." \
@@ -272,9 +294,11 @@ else
         "Read runs/lab.log, then start it by hand:  scripts/start.sh"
 fi
 
-# ── 7 · preflight ───────────────────────────────────────────────────────────
-say "6 · Preflight"
+# ── 8 · preflight ───────────────────────────────────────────────────────────
+say "7 · Preflight"
 uv run python scripts/preflight.py || warn "preflight found something to fix; the lines above say what"
+
+mkdir -p runs && : > "$MARKER"
 
 say "Setup finished."
 [ "$UV_WAS_INSTALLED" -eq 1 ] && info "uv was just installed — run 'source ~/.local/bin/env' to get it in this shell"

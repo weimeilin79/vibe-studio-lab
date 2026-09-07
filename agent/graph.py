@@ -127,13 +127,8 @@ propose_directions = Agent(
 def direction_gate(node_input: Directions):
     cands = [c.model_dump() for c in node_input.candidates]
     yield Event(state={"candidates": cands})
-    yield RequestInput(
-        message="Pick tonight's direction: 1, 2, 3 or 4.",
-        response_schema={
-            "type": "object",
-            "properties": {
-                "pick": {"type": "string", "enum": ["1", "2", "3", "4"]}}},
-        payload={"candidates": cands})
+    # TODO: GATE_INPUT - suspend the graph here: yield a RequestInput with a message,
+    # a response_schema (the form: one field, pick) and payload={"candidates": cands}
 
 
 def persist_direction(node_input, candidates: list = []):
@@ -153,8 +148,7 @@ def persist_direction(node_input, candidates: list = []):
     else:
         chosen = {"title": "untitled", "angle": "", "evidence": []}
     hook = chosen.get("hook") or " ".join(chosen["title"].split()[:4])
-    yield Event(state={"direction": chosen["title"], "angle": chosen.get("angle", ""),
-                       "hook": hook, "user:prefs": {"last_direction": chosen["title"]}})
+    # TODO: PERSIST_STATE - yield an Event whose state holds direction, angle, hook, and user:prefs
     yield Event(output=chosen)
 
 
@@ -178,7 +172,7 @@ def policy_check(node_input):
     lin = st.setdefault("lineage", {"evidence": [], "gates": {}})
     lin.setdefault("gates", {})["policy"] = {"ok": not bad, "hits": bad}
     state.save(st)
-    return Event(output=node_input, route="BLOCK" if bad else "OK")
+    # TODO: POLICY_ROUTE - return an Event whose output is node_input and whose route is "BLOCK" if bad else "OK"
 
 
 

@@ -77,8 +77,7 @@ async def _answer(row: dict, response: dict) -> list[str]:
     import importlib
     root = importlib.import_module(f"{APP}.agent").root_agent
     runner = Runner(app_name=APP, agent=root, session_service=drive.svc())
-    part = Part(function_response=FunctionResponse(
-        id=row["call_id"], name=row["name"], response=response))
+    part = Part(function_response=None)  # TODO: DELIVER_RESPONSE - FunctionResponse(id=row["call_id"], name=row["name"], response=response)
     if part.function_response is None:
         raise SystemExit("the delivery cannot answer the call yet: the FunctionResponse is not built "
                          "(agent/deliver.py, _answer). Do step 8a, edit 2, or use the catch-up card on 8b, "

@@ -47,7 +47,7 @@ render_desk = Agent(
     name="render_desk",
     model=config.MODEL,
     instruction=RENDER_INSTRUCTION,
-    tools=[LongRunningFunctionTool(render_submit)])  # TODO: VIDEO_TOOL - wrap it: LongRunningFunctionTool(render_submit)
+    tools=[render_submit])  # TODO: VIDEO_TOOL - wrap it: LongRunningFunctionTool(render_submit)
 
 root_agent = Workflow(
     name="stage6_video",
@@ -58,5 +58,4 @@ root_agent = Workflow(
            (join_research, propose_directions, direction_gate,
             persist_direction, policy_check),
            (policy_check, {"OK": scripter, "BLOCK": quarantine}),
-           (quarantine, scripter),
-           (scripter, render_desk, store_video)])  # TODO: VIDEO_EDGES - add the last chain: (scripter, render_desk, store_video)
+           (quarantine, scripter)])  # TODO: VIDEO_EDGES - add the last chain: (scripter, render_desk, store_video)

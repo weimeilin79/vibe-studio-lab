@@ -64,7 +64,7 @@ vibestudio/     the app of step 9: server/ (main, api, runner), server/platform/
                 publish, avatar, telemetry, graphinfo), web/ (the page), server/agent/ (the finished agent)
 checks/         the hole registry (holes.py) and its verifiers
 scripts/        preflight · start · starter · carve · rescue · reset · dev
-CODELAB.md      the lab itself; codelab-img/ holds its figures
+CODELAB.md      the lab itself; img/ holds its figures
 ```
 
 ## The holes
@@ -105,4 +105,4 @@ run `scripts/carve.py`, copy the carved file into `starter/`, run
 
 `scripts/dev.sh` runs the learning center with hot reload (the API on 4600,
 Vite on 5173). Diagram sources for the codelab figures live in
-`codelab-img/src/`; the codelab is built with `claat`.
+`img/src/`; the codelab is built with `claat`.
