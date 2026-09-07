@@ -17,3 +17,28 @@ codelab-img/src/decor/*-s.png
 .preview/
 app/static/renders/
 app/static/avatars/
+
+# local claat build of CODELAB.md
+build/
+
+# AI coding assistants (local config, sessions, memory) - never committed
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+.codex/
+AGENTS.md
+.antigravity/
+.gemini/
+GEMINI.md
+.cursor/
+.cursorrules
+.aider*
+.copilot/
+.windsurf/
+.windsurfrules
+.continue/
+
+# frontend build + deps
+web/node_modules/
+web/dist/

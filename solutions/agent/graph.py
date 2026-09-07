@@ -16,13 +16,14 @@ edge you add, and the live map grows a node the moment you do.
 """
 import json
 import pathlib
+import re
 
 from google.adk import Agent, Event, Workflow
 from google.adk.events.request_input import RequestInput
 from google.adk.workflow import START, JoinNode
 
 from . import config, state
-from .schemas import Directions, Script, direction_schema
+from .schemas import Directions, Script
 
 
 # ── research fan-out (pure compute + reads; it grows chapter by chapter) ────
@@ -76,45 +77,37 @@ def read_memory(node_input):
 
 join_research = JoinNode(name="join_research")
 
-# the bundle renders whichever feeds are WIRED - absent feeds simply are not
-# here yet, which is the honest truth until their chapters add them
-SECTION_ORDER = ("scan_trends", "read_memory", "read_backcatalog", "read_graph")
-
-
-def compose_bundle(node_input):
-    """Flatten the join payload into the text bundle the proposer reads."""
-    sections = []
-    for key in SECTION_ORDER:
-        if key not in node_input:
-            continue
-        payload = node_input.get(key, {})
-        (name, value), = payload.items() if payload else (("empty", {}),)
-        body = json.dumps(value, ensure_ascii=False, indent=1)
-        empty = " (EMPTY)" if not value else ""
-        sections.append(f"## {name}{empty}\n{body}")
-    return Event(output="\n\n".join(sections))
 
 
 # ── the proposer · a workflow node, so it decides in ONE call ───────────────
+PROPOSE_INSTRUCTION = (
+    "You run the creator's short-video channel. The message you received is "
+    "tonight's research bundle as JSON: one key per reader node (scan_trends, "
+    "read_backcatalog, and in later steps read_memory and read_graph); the "
+    "creator's idea (may be empty) rides with it.\n"
+    "PITCH exactly FOUR candidate directions for the next <=20s video. Each "
+    "candidate: a title (<=60 chars, a concrete filmable characterful scene - "
+    "never a meta content-strategy topic), an angle (the twist, one line), and "
+    "a hook: 2-4 punchy Title Case words printed as a sticker on the thumbnail "
+    "- the feeling of the moment, no punctuation, no emoji.\n"
+    "Candidates 1 to 3 are publishable directions grounded in the research.\n"
+    "Candidate 4 is the outrage-bait direction the channel must never publish, "
+    "pitched the way a rival channel would. Its title MUST contain at least one "
+    "of these words, spelled exactly: competitor, scam, revenge, humiliate, "
+    "fake, dangerous stunt. Its hook is provocative too. It exists so the "
+    "policy gate has something to refuse.\n"
+    "Every evidence entry must cite a REAL source: 'trends', 'backcatalog', "
+    "'memory#<id>' (ids present in the memory section only), or 'graph#<n>' "
+    "(query numbers present in the graph section only). Empty or absent "
+    "sections are never cited - never invent evidence.\n"
+    "If the memory section contains CHANNEL_CONSTRAINTS rules, candidates 1 to "
+    "3 MUST honor them.")
+
 propose_directions = Agent(
-    name="propose_directions", model=config.MODEL,
-    output_schema=Directions,
-    instruction=(
-        "You run the creator's short-video channel. The message you received is "
-        "tonight's research bundle; the creator's idea (may be empty) rides "
-        "with it.\n"
-        "PITCH exactly THREE distinct candidate directions for the next <=20s "
-        "video. Each candidate: a title (<=60 chars, a concrete filmable "
-        "characterful scene - never a meta content-strategy topic) and an angle "
-        "(the twist, one line), and a hook: 2-4 punchy Title Case words printed as "
-        "a sticker on the thumbnail - the feeling of the moment, no punctuation, "
-        "no emoji.\n"
-        "Every evidence entry must cite a REAL source: 'trends', 'backcatalog', "
-        "'memory#<id>' (ids present in the memory section only), or 'graph#<n>' "
-        "(query numbers present in the graph section only). Empty or absent "
-        "sections are never cited - never invent evidence.\n"
-        "If the memory section contains CHANNEL_CONSTRAINTS rules, every "
-        "candidate MUST honor them."))
+    name="propose_directions",
+    model=config.MODEL,
+    instruction=PROPOSE_INSTRUCTION,
+    output_schema=Directions)
 
 
 # ── the human door · pick a direction (RequestInput: one small form) ────────
@@ -125,9 +118,12 @@ def direction_gate(node_input: Directions):
     st["candidates"] = cands                             # driver clipboard copy
     state.save(st)
     yield RequestInput(
-        message="Pick tonight's direction - type 1, 2 or 3 (or custom).",
-        response_schema=direction_schema(len(cands)),
-        payload={"idea": st.get("hint", ""), "candidates": cands})
+        message="Pick tonight's direction: 1, 2, 3 or 4.",
+        response_schema={
+            "type": "object",
+            "properties": {
+                "pick": {"type": "string", "enum": ["1", "2", "3", "4"]}}},
+        payload={"candidates": cands})
 
 
 def persist_direction(node_input, candidates: list = [], constraints: str = ""):
@@ -136,26 +132,19 @@ def persist_direction(node_input, candidates: list = [], constraints: str = ""):
     are per-user and cross-session, so the NEXT lap's idea box can suggest
     something like this one.
 
-    Belt and braces on the pick: schemas.direction_schema() no longer lets a
-    null poison the session at rehydration, and this normalises whatever DOES
-    arrive. `.get("pick", "1")` only defaulted when the key was ABSENT - a
-    present-but-null pick sailed through and `pick.isdigit()` blew up with
-    AttributeError. A human door must degrade to a sensible choice, never
-    raise: null / missing / "" / 7 / "banana" all resolve to candidate 1,
-    unless you typed a custom line, in which case we use that."""
+    A human door must degrade to a sensible choice, never raise: a null,
+    missing, blank, or out-of-range pick resolves to candidate 1. (The
+    schema's `required` is empty on purpose: ADK re-validates a STORED answer
+    on every resume, and a required field that arrived as null would make
+    the session unresumable.)"""
     ni = node_input if isinstance(node_input, dict) else {}
     raw = ni.get("pick")
-    pick = str(raw).strip().lower() if raw is not None else ""
-    custom = (ni.get("custom") or "").strip()
-    # blank pick + a custom line you actually typed = you meant the custom line
-    if (pick == "custom" or not pick) and custom:
-        chosen = {"title": custom, "angle": "(your own direction)", "evidence": [],
-                  "hook": " ".join(custom.split()[:4])}
-    elif candidates:
+    pick = str(raw).strip() if raw is not None else ""
+    if candidates:
         i = int(pick) - 1 if pick.isdigit() else 0
         chosen = candidates[max(0, min(len(candidates) - 1, i))]
     else:
-        chosen = {"title": custom or "untitled", "angle": "", "evidence": []}
+        chosen = {"title": "untitled", "angle": "", "evidence": []}
     hook = chosen.get("hook") or " ".join(chosen["title"].split()[:4])
     yield Event(state={"direction": chosen["title"], "angle": chosen.get("angle", ""),
                        "hook": hook, "constraints": constraints or "(none yet)",
@@ -185,11 +174,10 @@ def policy_words() -> list[str]:
 def policy_check(node_input):
     """One node, one decision: `route` names the edge to take next."""
     text = f"{node_input.get('title', '')} {node_input.get('angle', '')}".lower()
-    bad = [w for w in policy_words() if w in text]
+    bad = [w for w in policy_words() if re.search(rf"\b{re.escape(w)}\b", text)]
     st = state.load()
     lin = st.setdefault("lineage", {"evidence": [], "memory_refs": [], "graph_refs": [],
-                                    "shots": [], "repair": [], "deadline": [],
-                                    "approvals": [], "gates": {}})
+                                    "render": {}, "approvals": [], "gates": {}})
     lin.setdefault("gates", {})["policy"] = {"ok": not bad, "hits": bad}
     state.save(st)
     return Event(output=node_input, route="BLOCK" if bad else "OK")
@@ -207,18 +195,36 @@ def quarantine(node_input):
 
 
 # ── pure production: script the cleared direction (runs quietly) ────────────
+SCRIPT_INSTRUCTION = (
+    "Write the production script for the approved video direction. The message "
+    "you received is the direction as JSON: title, angle, hook.\n"
+    "Channel constraints: {constraints}\n"
+    "Deliver: title (<=60 chars, honoring the direction), description "
+    "(1-2 sentences), 3-5 tags, an opening_line, and EXACTLY 3 shots (each "
+    "one visual sentence for a render model, in cozy low-poly style).\n"
+    "If constraints include a conclusion-first rule, opening_line must state "
+    "the final outcome outright, and only then set conclusion_first=true. "
+    "Never claim conclusion_first for a teaser or a question.")
+
 scripter = Agent(
-    name="scripter", model=config.MODEL, output_schema=Script,
-    instruction=(
-        "Write the production script for this approved video direction.\n"
-        "Direction: {direction}\nAngle: {angle}\n"
-        "Channel constraints: {constraints}\n"
-        "Deliver: title (<=60 chars, honoring the direction), description "
-        "(1-2 sentences), 3-5 tags, an opening_line, and EXACTLY 3 shots (each "
-        "one visual sentence for a render model, in cozy low-poly style).\n"
-        "If constraints include a conclusion-first rule, opening_line must state "
-        "the final outcome outright, and only then set conclusion_first=true. "
-        "Never claim conclusion_first for a teaser or a question."))
+    name="scripter",
+    model=config.MODEL,
+    instruction=SCRIPT_INSTRUCTION,
+    output_schema=Script)
+
+# the quarantine node of step 5b: a task-mode agent, assembled by the student
+# in stage3_router/agent.py from this instruction and agent/cleanup_tools.py
+QUARANTINE_INSTRUCTION = (
+    "The channel's policy refused the direction you received. The message is "
+    "the direction as JSON: title, angle, hook. Make it publishable without "
+    "changing the scene.\n"
+    "1. Call find_policy_hits with the title, and again with the angle, to "
+    "learn which words are refused.\n"
+    "2. For every refused word call suggest_replacement and rewrite the text "
+    "with the suggestion (or a gentle synonym if none is listed).\n"
+    "3. Call find_policy_hits again on the rewritten title and angle. Repeat "
+    "steps 2 and 3 until both come back clean.\n"
+    "4. Only then call finish_task with the cleaned title, angle and hook.")
 
 
 def store_script(node_input: Script):
@@ -234,8 +240,7 @@ def store_script(node_input: Script):
             e["rows_snapshot"] = report[e["source"]]["rows"]
     # standalone runs (the stage apps) have no lap driver to scaffold the ledger
     lin = st.setdefault("lineage", {"evidence": [], "memory_refs": [], "graph_refs": [],
-                                    "shots": [], "repair": [], "deadline": [],
-                                    "approvals": [], "gates": {}})
+                                    "render": {}, "approvals": [], "gates": {}})
     lin["topic"] = brief.get("topic", node_input.title)
     lin["angle"] = brief.get("angle", "")
     lin["evidence"] = evidence
@@ -257,7 +262,7 @@ wf = Workflow(
     edges=[
         (START, scan_trends, join_research),
         (START, read_backcatalog, join_research),
-        (join_research, compose_bundle, propose_directions, direction_gate,
+        (join_research, propose_directions, direction_gate,
          persist_direction, policy_check),
         (policy_check, {"OK": scripter, "BLOCK": quarantine}),
         (scripter, store_script),

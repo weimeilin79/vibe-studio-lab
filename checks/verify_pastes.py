@@ -17,7 +17,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from checks.holes import HOLES  # noqa: E402
 
-SHOWN_HOLES = {"RESUME", "EDGES", "GRAPH_EDGE", "MEMORY_EDGE",
+SHOWN_HOLES = {"TOOLS", "FANOUT_JOIN", "FANOUT_EDGES", "PROPOSER", "GATE_INPUT", "STAGE2_EDGES", "POLICY_ROUTE", "QUARANTINE", "ROUTER_EDGES", "RESUME", "EDGES", "GRAPH_EDGE", "MEMORY_EDGE",
                "JOIN_CONDITION", "EDGE_TABLE", "GENERATE"}
 md = (ROOT / "CODELAB.md").read_text()
 pattern = re.compile(

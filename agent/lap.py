@@ -12,7 +12,7 @@ def wf_sid() -> str:
 
 def start_lap(hint: str) -> str:
     """Fresh run scaffolding; returns the kickoff message for the first leg."""
-    from world import broker, platform
+    from world import platform
     if not wf.edges:
         raise NotImplementedError(
             "TODO: EDGES — the graph has no edges yet. Open agent/graph.py, "
@@ -21,13 +21,12 @@ def start_lap(hint: str) -> str:
     st = state.load()
     creds = st.get("creds") or platform.join("annie")
     run_id = f"run_{int(time.time())}"
-    broker.reset()
     state.save({
         "run_id": run_id, "lap": st.get("next_lap", 1),
         "next_lap": st.get("next_lap", 1), "creds": creds, "hint": hint,
         "last_learn_flags": st.get("last_learn_flags"),   # survives lap resets
         "lineage": {"evidence": [], "memory_refs": [], "graph_refs": [],
-                    "shots": [], "repair": [], "deadline": [], "approvals": [],
+                    "render": {}, "approvals": [],
                     "gates": {}},
     })
     prefs = drive.run(drive.ensure_user_state(f"{run_id}_wf")).get("user:prefs")
@@ -102,7 +101,7 @@ def print_where() -> None:
         print(f"⏸  FORM — {w['message']}")
         for i, c in enumerate(pay.get("candidates") or [], 1):
             print(f"   {i} · {c.get('title')}")
-        print('   answer: python -m agent.answer --pick 1   (or --pick custom --custom "…")')
+        print('   answer: python -m agent.answer --pick 1')
     elif p == "proposal":
         print("⏸  PROPOSAL — the topic gate is chatting with you.")
         print('   push back or accept: python -m agent.say "…"')

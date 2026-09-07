@@ -1,6 +1,7 @@
 """The adk web entry: `adk web .` finds this because the folder name is the
-app name and this file exports root_agent. The desk agent is the root so the
-chat box can drive section 1's mechanism live."""
+app name and this file exports root_agent. The folder name matches
+config.APP, so selecting `vibestudio` in adk web lists the lap's own sessions
+(run_<id>_wf, run_<id>_desk) for inspection. The desk agent is the root."""
 import pathlib
 import sys
 

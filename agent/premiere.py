@@ -1,7 +1,7 @@
 """`python -m agent.premiere` - put your published video on the ROOM's platform.
 
 The local Wall is your analytics engine; the room's VibeTube is where
-everyone's videos meet. Same lesson as chapter 🏁, different host: publishing
+everyone's videos meet. Same lesson as the publish step, different host: publishing
 is ONE multipart POST to a contract - no SDK, no session, just HTTP.
 
 Needs (from your instructor, in .env):
@@ -11,26 +11,10 @@ Needs (from your instructor, in .env):
 """
 import os
 import pathlib
-import shutil
-import subprocess
 
 import httpx
 
 from . import config, state
-
-# The premiere cut is the ONE step in the lab that cannot degrade: the room
-# wants an mp4, and without ffmpeg there is no way to make one. Everything
-# else that touches ffmpeg (world/renderfarm.py) already falls back to a text
-# manifest. So this is the message the whole lab uses for a missing binary -
-# one sentence saying what is missing and the exact command that fixes it.
-NO_FFMPEG = ("ffmpeg is not installed — the premiere cut cannot be packaged. "
-             "Fix: ./setup_codelab.sh (or: sudo apt-get install -y ffmpeg)")
-
-
-def have_ffmpeg() -> bool:
-    """Is ffmpeg on PATH? Read by the stage list so the room row can say the
-    premiere will be skipped BEFORE the lap spends a minute getting there."""
-    return bool(shutil.which("ffmpeg"))
 
 def _room() -> tuple[str, str, str]:
     """Read the room's address at CALL time, so a .env filled during Setup
@@ -41,36 +25,12 @@ def _room() -> tuple[str, str, str]:
 
 
 def package(st) -> pathlib.Path:
-    """The premiere cut IS the final cut post-production stitched (title card
-    + the shots the farm delivered). Only if that file does not exist - no
-    ffmpeg, or a manifest-only run - does the studio fall back to a 6-second
-    poster made from the approved thumbnail."""
-    final = config.ROOT / "app" / "static" / "renders" / f"final_{st['run_id']}.mp4"
-    if final.exists():
-        return final
-    out = config.RUNS / f"premiere_{st['run_id']}.mp4"
-    if out.exists():
-        return out
-    ff = shutil.which("ffmpeg")
-    if not ff:
-        # Checked BEFORE the work, so the reason that reaches the wall card is
-        # a sentence with a fix in it, not "[Errno 2] No such file or
-        # directory: 'ffmpeg'" from a subprocess nobody can see.
-        raise RuntimeError(NO_FFMPEG)
-    thumb = (st.get("thumb") or {}).get("ref", "")
-    thumb_file = config.ROOT / "app" / thumb.lstrip("/") if thumb else None
-    if thumb_file and thumb_file.exists():
-        src = ["-loop", "1", "-i", str(thumb_file)]
-    else:  # honest fallback: a plain slate
-        src = ["-f", "lavfi", "-i", "color=c=0xF5E9DA:s=1280x720"]
-    cmd = [ff, "-y", *src, "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
-           "-t", "6", "-vf",
-           "scale=1280:720:force_original_aspect_ratio=decrease,"
-           "pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=white",
-           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
-           "-shortest", str(out)]
-    subprocess.run(cmd, check=True, capture_output=True)
-    return out
+    """The file the room gets: the Veo clip the desk rendered."""
+    ref = (st.get("render") or {}).get("url") or ""
+    path = config.ROOT / "app" / ref.lstrip("/") if ref else None
+    if not path or not path.exists():
+        raise RuntimeError("no rendered video to post (prebaked run, or the render failed)")
+    return path
 
 
 def publish_to_room(st) -> dict:
@@ -110,7 +70,7 @@ def publish_to_room(st) -> dict:
             return {"skipped": f"{r.status_code} — {detail}"}
         vid = r.json()["id"]
         return {"url": f"{url}/e/{event}?v={vid}"}
-    except Exception as e:  # ffmpeg missing, network down, anything
+    except Exception as e:  # no clip, network down, anything
         return {"skipped": str(e)[:120]}
 
 
@@ -125,7 +85,6 @@ def main():
     st = state.load()
     if not st.get("published"):
         print("nothing published yet - finish a lap first"); return
-    print("── packaging the premiere cut (ffmpeg, ~5s) ──")
     print(f"── POST {url}/api/events/{event}/videos ──")
     res = publish_to_room(st)
     state.update(room=res)

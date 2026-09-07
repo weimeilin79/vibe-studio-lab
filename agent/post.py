@@ -12,22 +12,20 @@ from google.genai import types as gtypes
 from . import config, drive, state
 
 def editor(node_input):
-    """Cut the shots together: a title card from the thumbnail you approved,
-    then every shot the farm delivered - real Veo clips when the farm is
-    real. That film is what plays on the Channel wall and in the room."""
-    from world import renderfarm
+    """Pick up the film: the one Veo clip the desk rendered. That file is what
+    plays on the Channel wall and in the room. With no clip (a prebaked run,
+    or a render that failed) the wall gets an honest manifest, not a fake mp4."""
     st = state.load()
-    urls = [s.get("url") for s in st["shots"] if s.get("url")]
-    final_ref = renderfarm.final_cut(st["run_id"], (st.get("thumb") or {}).get("ref", ""), urls)
-    if not final_ref:                       # no ffmpeg: an honest manifest, not a fake .mp4
+    render = st.get("render") or {}
+    final_ref = render.get("url")
+    if not final_ref:
         final_ref = f"runs/final_{st['run_id']}.txt"
-        (config.ROOT / final_ref).write_text("PREBAKED CUT\n" + "\n".join(urls))
-    else:
-        ms = renderfarm.duration_ms(final_ref)   # the wall and the room get the TRUE length
-        if ms:
-            st["duration_ms"] = ms
-            state.save(st)
-    return Event(output={"final_ref": final_ref, "n_shots": len(urls)})
+        (config.ROOT / final_ref).write_text(
+            f"NO VIDEO ({render.get('status', 'none')}: {render.get('reason', 'prebaked run')})\n"
+            f"prompt: {render.get('prompt', '')}\n")
+    st.setdefault("duration_ms", render.get("duration_ms") or 8000)
+    state.save(st)
+    return Event(output={"final_ref": final_ref, "rendered": bool(render.get("url"))})
 
 
 def eval_gate(node_input):

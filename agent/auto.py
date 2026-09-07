@@ -1,6 +1,6 @@
 """The app's automation - the chains behind Vibe Studio's three buttons.
 
-  python -m agent.auto direction --pick 1 [--custom "…"]
+  python -m agent.auto direction --pick 1
       answer the form, and if the policy gate cleared it, roll straight
       into rendering. (BLOCK ends the lap politely - nothing to chain.)
 

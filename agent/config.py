@@ -37,16 +37,9 @@ DB_URL = f"sqlite+aiosqlite:///{RUNS}/sessions.db"
 APP = "vibestudio"
 USER = "creator"
 STATE = RUNS / "state.json"
-BROKER = RUNS / "broker.json"
 WALL_DB = RUNS / "wall.db"
 DATASET = os.environ.get("STUDIO_DATASET", "vibestudio")
-# the render farm: REAL Veo shots by default (a minute or three each), or a
-# prebaked clock (STUDIO_REAL_VIDEO=0) for a no-cost run - the deadline
-# follows the farm unless you set it yourself
+# the video: ONE real Veo clip per lap by default (a minute or three), or a
+# prebaked stand-in (STUDIO_REAL_VIDEO=0) for a no-cost run. Retries, interval
+# and timeout live in agent/videogen.py
 REAL_VIDEO = os.environ.get("STUDIO_REAL_VIDEO", "1").lower() in ("1", "true")
-_DEADLINE_ENV = os.environ.get("STUDIO_DEADLINE_S")
-DEADLINE_S = float(_DEADLINE_ENV or ("420" if REAL_VIDEO else "14"))
-# What a run degrades TO when Veo turns out to be unreachable. Veo's 420s window
-# is meaningless once we are on the prebaked clock - waiting it out would punish
-# the learner twice for one outage. broker.deadline_s() picks between the two.
-PREBAKED_DEADLINE_S = float(_DEADLINE_ENV or "14")

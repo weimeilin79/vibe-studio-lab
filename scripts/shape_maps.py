@@ -95,15 +95,14 @@ def main():
 
     (OUT / "stage-1-fanout.svg").write_text(svg(
         dump(s1), {"__START__": (0, 0.5), **READERS,
-                   "join_research": (2, 0.5), "compose_bundle": (3, 0.5)},
+                   "join_research": (2, 0.5)},
         "stage 1 · the research department — adk web app `stage1_fanout` (two readers, for now)",
         kinds={**READER_KINDS, "join_research": "join"},
-        subs={**READER_SUBS, "join_research": "waits for every wired feed",
-              "compose_bundle": "one bundle out"}, routes=False))
+        subs={**READER_SUBS, "join_research": "waits for every wired feed"}, routes=False))
 
     (OUT / "stage-2-direction.svg").write_text(svg(
         dump(s2), {"__START__": (0, 0.5), **READERS,
-                   "join_research": (2, 0.5), "compose_bundle": (3, 0.5),
+                   "join_research": (2, 0.5),
                    "propose_directions": (4, 0.5), "direction_gate": (5, 0.5),
                    "persist_direction": (6, 0.5)},
         "stage 2 · three candidates, then the human door — adk web app `stage2_direction`",
@@ -116,11 +115,10 @@ def main():
 
     (OUT / "stage-3-router.svg").write_text(svg(
         dump(s3), {"__START__": (0, 0.7), **READERS,
-                   "join_research": (2, 0.7), "compose_bundle": (3, 0.7),
+                   "join_research": (2, 0.7),
                    "propose_directions": (4, 0.7), "direction_gate": (5, 0.7),
                    "persist_direction": (6, 0.7), "policy_check": (7, 0.7),
-                   "scripter": (8, 0.2), "quarantine": (8, 1.6),
-                   "store_script": (9, 0.2)},
+                   "scripter": (8, 0.2), "quarantine": (8, 1.6)},
         "stage 3 · the policy gate, before any money — adk web app `stage3_router`",
         kinds={**READER_KINDS, "join_research": "join",
                "propose_directions": "agent", "direction_gate": "human",

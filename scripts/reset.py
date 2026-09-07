@@ -22,12 +22,11 @@ THUMBS = ROOT / "app" / "static" / "thumbs"
 # that lap's truth, and is a lie the moment the next lap starts:
 #   state.json      the lap itself
 #   sessions.db     the lap's ADK session, incl. its open long-running calls
-#   broker.json     the lap's Veo jobs + the degraded flag farm_note() reads
 #   ui_busy.json    which worker is running (a pid, and pids get recycled)
 #   ui_last.json    how the last worker exited - failed_card() renders it
 #   ui_control.json the receipt End/Restart leaves for the page
 #   *_run.log       the worker output failed_card() and stages.log_tail() show
-LAP_FILES = ("state.json", "sessions.db", "broker.json", "ui_busy.json",
+LAP_FILES = ("state.json", "sessions.db", "ui_busy.json",
              "ui_last.json", "ui_control.json")
 # NOT here, on purpose: runs/wall.db is PUBLISHED history (the Channel page and
 # agent.learn read it, and its rows point at app/static/{thumbs,renders}), and
@@ -86,8 +85,7 @@ def read_user_state() -> dict[str, dict]:
     the agents write and checks/check.py asserts on.
 
     Whatever the row holds is what comes back - user:prefs from
-    graph.persist_direction, user:thumb_draft and user:thumb_idea from
-    desk.remember_thumb, and any `user:` key added after this was written.
+    graph.persist_direction, and any `user:` key added after this was written.
     There is no list here to forget to update.
 
     Which users: ADK has a reader per (app_name, user_id) and no way to

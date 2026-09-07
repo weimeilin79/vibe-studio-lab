@@ -56,51 +56,19 @@ def gate_spinup():
     check("the wall db exists", config.WALL_DB.exists())
 
 
-def gate_one():
-    """Works for BOTH delivery paths: the dev UI's response box and
-    `python -m agent.deliver` - all we assert is that some session carried a
-    long-running call and that its result came back addressed by the same id."""
-    async def _scan():
-        service = drive.svc()
-        found = []
-        for user in ("user", config.USER):
-            resp = await service.list_sessions(app_name=config.APP, user_id=user)
-            for meta in resp.sessions:
-                s = await service.get_session(app_name=config.APP, user_id=user,
-                                              session_id=meta.id)
-                lr, latest = set(), {}
-                for ev in (s.events if s else []):
-                    if getattr(ev, "long_running_tool_ids", None):
-                        lr |= set(ev.long_running_tool_ids)
-                    for r in ev.get_function_responses() or []:
-                        latest[r.id] = r.response or {}
-                if lr:
-                    done = [c for c in lr
-                            if latest.get(c, {}).get("status") not in (None, "pending")]
-                    found.append((meta.id, len(lr), len(done)))
-        return found
-    sessions = drive.run(_scan())
-    check("a session carried a long-running call", bool(sessions),
-          "type a render request in adk web first")
-    delivered = [s for s in sessions if s[2] >= 1]
-    check("its result was delivered by id (UI box or agent.deliver)",
-          bool(delivered), f"open calls still pending in {[s[0] for s in sessions]}")
-
-
 def gate_pending():
     s = st()
     lr, latest, _ = _session_calls(f"{s['run_id']}_desk")
-    check("the desk carried >=3 long-running render calls", len(lr) >= 3, str(len(lr)))
+    check("the desk carried a long-running render call", len(lr) >= 1, str(len(lr)))
     answered = [cid for cid in lr if cid in latest
                 and latest[cid][1].get("status") != "pending"]
     check("every open call got its result delivered (by id)",
           len(answered) == len(lr), f"{len(answered)}/{len(lr)}")
-    # with a REAL farm nothing may stall; what must hold is that no wait was
-    # left open - every shot is delivered, or rescued by the deadline
-    shots = s.get("shots", [])
-    check("no shot left hanging (delivered, or rescued by the deadline)",
-          bool(shots) and all(x.get("status") in ("done", "fallback") for x in shots),
-          " ".join(x.get("status", "?") for x in shots))
+    # what must hold is that the wait was not left open: the render was
+    # delivered, or recorded as failed with Veo's reason
+    render = s.get("render") or {}
+    check("the render was not left hanging (done, or failed with a reason)",
+          render.get("status") in ("done", "failed"), str(render.get("status", "?")))
 
 
 def gate_workflow():
@@ -139,11 +107,10 @@ def gate_publish():
     s = st()
     lin = s["lineage"]
     check("published", "published" in s)
-    # a QC failure is the exception on a real farm; when one happens the
-    # medic must have rewritten the prompt - and never left it unchanged
-    check("every QC failure was repaired by the medic (or none happened)",
-          all(r["original"] != r["new_prompt"] for r in lin["repair"]),
-          f"{len(lin['repair'])} repair(s)")
+    render = lin.get("render") or {}
+    check("the render's outcome is on record (done, or failed with a reason)",
+          render.get("status") in ("done", "failed"),
+          f"{render.get('status', '?')} after {render.get('attempt', 1)} attempt(s)")
     check("gates ran BEFORE publish and passed",
           lin["gates"].get("policy", {}).get("ok") is True
           and all((lin["gates"].get("eval", {}).get("checks") or {"x": False}).values()))
@@ -245,7 +212,7 @@ def gate_loop():
           bool(s.get("prefs", {}).get("last_direction")), str(s.get("prefs")))
 
 
-GATES = {"spinup": gate_spinup, "one": gate_one, "pending": gate_pending, "workflow": gate_workflow,
+GATES = {"spinup": gate_spinup, "pending": gate_pending, "workflow": gate_workflow,
          "hitl": gate_hitl, "publish": gate_publish, "state": gate_state,
          "graph": gate_graph, "memory": gate_memory, "loop": gate_loop}
 # section aliases - one command per codelab section

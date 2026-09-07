@@ -11,7 +11,7 @@ ships complete except **three one-line edits** you make while following it.
 
 | | |
 |---|---|
-| ⏳ 📬 | **long running** — `pending` is a value in the session log, not a thread; resume is one `function_response` with the same call id |
+| 🏁 📬 | **long running** — `pending` is a value in the session log, not a thread; resume is one `function_response` with the same call id |
 | 🔺 🗺️ 🏁 | **workflows + human-in-the-loop** — three runnable shapes (line · router · fan-out+join), nodes sharing one state, an agent as a node and a workflow as a node; then the real graph, where `RequestInput` pauses it for a person |
 | 💾 | **session state** — `Event(state=…)` → `session.state` → the SessionService, and what the `user:` prefix changes |
 | 🌍 | **BigQuery property graph** — a declared lens over tables you already have |
@@ -40,12 +40,12 @@ honestly if you want to skip them.
 
 ```
 agent/       the backend you read (and lightly edit): the workflow, the desk,
-             drivers (deliver · finish · learn · bank · premiere)
-vibestudio/  8-line adk web entry — exports root_agent
+             drivers (render · approve · finish · learn · bank · premiere)
+vibestudio/  adk web entry — exports root_agent so the inspector lists the lap's sessions
 shape1_line/ shape2_router/ shape3_fanout/
              chapter 🔺 — three sandbox workflows, each its own adk web app
 app/         Vibe Studio: the frontend + the Wall API, one FastAPI server
-world/       the prebaked render farm, the platform, the thumbnail generator
+world/       the platform (Wall API) and the thumbnail generator; agent/videogen.py talks to Veo
 bqgraph/     chapter 🌍 — load · export · report over a BigQuery property graph
 checks/      verification gates (`python -m checks.check <name>`) + the hole registry
 scripts/     preflight · graph.sh · carve · rescue · reset · shape_maps
