@@ -15,19 +15,15 @@ from agent import config
 
 
 def check_trends() -> dict:
-    """Read what is trending on the platform right now."""
-    from world import platform
-    return {"trends": platform.trends()}
+    """Ten formats trending on the platform right now, with a heat score each."""
+    from agent.trends import sample_trends
+    return {"trends": sample_trends()}
 
 
-def read_back_catalog() -> dict:
-    """List the channel's already-published videos and how they performed."""
-    from agent import state
-    from world import platform
-    creds = state.load().get("creds")
-    vids = platform.outcomes(creds["creator_id"]) if creds else []
-    return {"backcatalog": [{"title": v["title"], "avg_watch_pct": v["avg_watch_pct"]}
-                            for v in vids]}
+def read_backlog() -> dict:
+    """The creator's backlog: ideas they noted down to make someday."""
+    from agent.graph import backlog_notes
+    return {"backlog": backlog_notes()}
 
 
 root_agent = Agent(
@@ -36,7 +32,7 @@ root_agent = Agent(
     instruction=(
         "You run the creator's short-video channel, alone.\n"
         "When the creator gives you an idea (or nothing), do ALL of this:\n"
-        "check what is trending. look at your back catalog. propose a "
+        "check what is trending. look at your backlog of ideas. propose a "
         "direction and agree on it with the creator. refuse blacklisted "
         "subjects (competitor, hateful, gore). then describe the video you "
         "would make: a title (<=60 chars) and 3 shots, one visual sentence "

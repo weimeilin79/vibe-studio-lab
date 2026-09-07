@@ -32,13 +32,10 @@ else:
     os.environ.pop("GOOGLE_GENAI_USE_VERTEXAI", None)
 
 MODEL = os.environ.get("STUDIO_MODEL", "gemini-3-flash-preview")   # same id on Vertex and AI Studio
-STUDIO_URL = os.environ.get("STUDIO_URL", "http://127.0.0.1:4600")
 DB_URL = f"sqlite+aiosqlite:///{RUNS}/sessions.db"
 APP = "vibestudio"
 USER = "creator"
 STATE = RUNS / "state.json"
-WALL_DB = RUNS / "wall.db"
-DATASET = os.environ.get("STUDIO_DATASET", "vibestudio")
 # the video: ONE real Veo clip per lap by default (a minute or three), or a
 # prebaked stand-in (STUDIO_REAL_VIDEO=0) for a no-cost run. Retries, interval
 # and timeout live in agent/videogen.py

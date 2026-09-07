@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, RotateCcw, Save } from "lucide-react";
+import { tint } from "../steps/colors";
 
 /**
  * A small in-page Python editor: a transparent textarea over a highlighted
@@ -185,7 +186,7 @@ export function CodeEditor({
               // the textarea and put the caret on the wrong line.
               style={{
                 height: "1.6em",
-                ...(highlightPattern?.test(l) ? { background: `${accent}22`, boxShadow: `inset 3px 0 0 ${accent}` } : {}),
+                ...(highlightPattern?.test(l) ? { background: tint(accent, 0.13), boxShadow: `inset 3px 0 0 ${accent}` } : {}),
               }}
               dangerouslySetInnerHTML={{
                 __html: inString[i]

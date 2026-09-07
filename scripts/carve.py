@@ -14,7 +14,7 @@ from checks.holes import HOLES  # noqa: E402
 
 # the three spots the student fills: draw the base graph, then wire in a
 # new research feed per act - the graph literally grows
-SHIP_HOLES = ["TOOLS", "FANOUT_JOIN", "FANOUT_EDGES", "PROPOSER", "GATE_INPUT", "STAGE2_EDGES", "POLICY_ROUTE", "QUARANTINE", "ROUTER_EDGES", "GRAPH_EDGE", "MEMORY_EDGE"]   # EDGES ships FILLED: students read the edge list, they do not type it
+SHIP_HOLES = ["TOOLS", "FANOUT_JOIN", "FANOUT_EDGES", "PROPOSER", "GATE_INPUT", "STAGE2_EDGES", "PERSIST_STATE", "POLICY_ROUTE", "QUARANTINE", "ROUTER_EDGES", "MEMORY_RECALL", "MEMORY_REMEMBER", "RAG_NODE", "VIDEO_TOOL", "DELIVER_RESPONSE", "VIDEO_EDGES"]   # EDGES ships FILLED: students read the edge list, they do not type it
 
 
 def main():

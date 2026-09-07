@@ -3,17 +3,20 @@ import { Link, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { In, StepHeader } from "../components/shared";
-import { StopAdk } from "../components/StopAdk";
+import { CatchUp } from "../components/CatchUp";
 import { api, useRunEvents } from "../lib/api";
 import type { Stage3Status } from "../lib/types";
-import { COLORS } from "./colors";
+import { COLORS, tint } from "./colors";
 import { CheckRow, DEFAULT_IDEA, EditPanel, RunPanel, VerifyPanel } from "./FanOut";
 
 /*
  * Step 5, in parts:
- *   5a  the router node: policy_check returns a route, the edge dict maps it;
- *       define scripter and a placeholder quarantine, wire the router, run both routes
- *   5b  agent modes; quarantine rebuilt as a task-mode agent that replaces the
+ *   5a  state: persist_direction reads candidates from shared state by parameter
+ *       name and writes the pick back with Event(state=...); append it, write the
+ *       state, run, open the State tab
+ *   5b  the router node: policy_check returns a route, the edge dict maps it;
+ *       finish the router's return, wire the router, run both routes
+ *   5c  agent modes; quarantine rebuilt as a task-mode agent that replaces the
  *       refused words with tools until the direction is clean, then hands it to
  *       the scripter; reroute quarantine -> scripter
  */
@@ -24,10 +27,11 @@ const CYAN = COLORS.cyan;
 const PURPLE = COLORS.purple;
 const GREEN = COLORS.green;
 
-type Part = "a" | "b";
+type Part = "a" | "b" | "c";
 const PARTS: { id: Part; label: string }[] = [
-  { id: "a", label: "The router node" },
-  { id: "b", label: "Agent modes and the task node" },
+  { id: "a", label: "State" },
+  { id: "b", label: "The router node" },
+  { id: "c", label: "Agent modes and the task node" },
 ];
 
 export function PolicyGate() {
@@ -36,8 +40,9 @@ export function PolicyGate() {
   const idx = PARTS.findIndex((p) => p.id === part);
   return (
     <div className="space-y-12">
-      {part === "a" && <RouterNode />}
-      {part === "b" && <TaskNode />}
+      {part === "a" && <StateNode />}
+      {part === "b" && <RouterNode />}
+      {part === "c" && <TaskNode />}
       <div className="flex items-center justify-between border-t border-hairline pt-6">
         {idx > 0 ? (
           <Link to={`/step/policy-gate/${PARTS[idx - 1].id}`} className="rounded-full border border-hairline px-4 py-2 text-xs font-semibold text-fg-muted hover:text-fg">
@@ -106,7 +111,7 @@ function LoadCheck({ intro }: { intro: string }) {
         </button>
       </div>
       {load && (
-        <div className="mt-3 rounded-xl border p-3 font-mono text-[11.5px]" style={load.ok ? { borderColor: `${GREEN}66`, color: GREEN, background: `${GREEN}10` } : { borderColor: `${RED}66`, color: RED, background: `${RED}10` }}>
+        <div className="mt-3 rounded-xl border p-3 font-mono text-[11.5px]" style={load.ok ? { borderColor: tint(GREEN, 0.4), color: GREEN, background: tint(GREEN, 0.06) } : { borderColor: tint(RED, 0.4), color: RED, background: tint(RED, 0.06) }}>
           {load.ok ? `loads · ${load.edges} edges` : load.error}
         </div>
       )}
@@ -114,7 +119,7 @@ function LoadCheck({ intro }: { intro: string }) {
   );
 }
 
-/** The router and its two exits; with reroute, the 5b edge back to the scripter. */
+/** The router and its two exits; with reroute, the 5c edge back to the scripter. */
 function RouterFigure({ reroute }: { reroute: boolean }) {
   const box = { fill: "var(--overlay)", stroke: "var(--hairline)" };
   return (
@@ -126,39 +131,222 @@ function RouterFigure({ reroute }: { reroute: boolean }) {
           </marker>
         </defs>
         <rect x="10" y="82" width="132" height="26" rx="8" {...box} />
-        <text x="76" y="99" fontSize="10" fontFamily="monospace" textAnchor="middle" fill="currentColor">persist_direction</text>
+        <text x="76" y="99" fontSize="10" fontFamily="var(--font-mono)" textAnchor="middle" fill="currentColor">persist_direction</text>
         <line x1="142" y1="95" x2="188" y2="95" stroke="currentColor" strokeWidth="1.2" markerEnd="url(#rt-arrow)" />
         {/* the diamond */}
-        <polygon points="260,50 330,95 260,140 190,95" fill={`${AMBER}1f`} stroke={AMBER} strokeWidth="1.2" />
-        <text x="260" y="92" fontSize="10" fontFamily="monospace" textAnchor="middle" fill={AMBER}>policy_check</text>
-        <text x="260" y="106" fontSize="8.5" fontFamily="monospace" textAnchor="middle" fill="currentColor" opacity="0.7">a function node</text>
+        <polygon points="260,50 330,95 260,140 190,95" fill={tint(AMBER, 0.12)} stroke={AMBER} strokeWidth="1.2" />
+        <text x="260" y="92" fontSize="10" fontFamily="var(--font-mono)" textAnchor="middle" fill={AMBER}>policy_check</text>
+        <text x="260" y="106" fontSize="8.5" fontFamily="var(--font-mono)" textAnchor="middle" fill="currentColor" opacity="0.7">a function node</text>
         {/* OK */}
         <path d="M330 95 C 370 95, 380 40, 430 40" fill="none" stroke={GREEN} strokeWidth="1.2" markerEnd="url(#rt-arrow)" />
-        <text x="372" y="56" fontSize="9.5" fontFamily="monospace" fill={GREEN}>route="OK"</text>
+        <text x="372" y="56" fontSize="9.5" fontFamily="var(--font-mono)" fill={GREEN}>route="OK"</text>
         <rect x="432" y="27" width="108" height="26" rx="8" {...box} />
-        <text x="486" y="44" fontSize="10" fontFamily="monospace" textAnchor="middle" fill="currentColor">scripter</text>
-        <text x="486" y="66" fontSize="8.5" fontFamily="monospace" textAnchor="middle" fill="currentColor" opacity="0.6">agent node</text>
+        <text x="486" y="44" fontSize="10" fontFamily="var(--font-mono)" textAnchor="middle" fill="currentColor">scripter</text>
+        <text x="486" y="66" fontSize="8.5" fontFamily="var(--font-mono)" textAnchor="middle" fill="currentColor" opacity="0.6">agent node</text>
         {/* BLOCK */}
         <path d="M330 95 C 370 95, 380 150, 430 150" fill="none" stroke={RED} strokeWidth="1.2" markerEnd="url(#rt-arrow)" />
-        <text x="366" y="142" fontSize="9.5" fontFamily="monospace" fill={RED}>route="BLOCK"</text>
-        <rect x="432" y="137" width="108" height="26" rx="8" fill={reroute ? `${PURPLE}1f` : "var(--overlay)"} stroke={reroute ? PURPLE : "var(--hairline)"} />
-        <text x="486" y="154" fontSize="10" fontFamily="monospace" textAnchor="middle" fill={reroute ? PURPLE : "currentColor"}>quarantine</text>
-        <text x="486" y="176" fontSize="8.5" fontFamily="monospace" textAnchor="middle" fill="currentColor" opacity="0.6">{reroute ? "task agent: clean the words" : "placeholder: says blocked, run ends"}</text>
+        <text x="366" y="142" fontSize="9.5" fontFamily="var(--font-mono)" fill={RED}>route="BLOCK"</text>
+        <rect x="432" y="137" width="108" height="26" rx="8" fill={reroute ? tint(PURPLE, 0.12) : "var(--overlay)"} stroke={reroute ? PURPLE : "var(--hairline)"} />
+        <text x="486" y="154" fontSize="10" fontFamily="var(--font-mono)" textAnchor="middle" fill={reroute ? PURPLE : "currentColor"}>quarantine</text>
+        <text x="486" y="176" fontSize="8.5" fontFamily="var(--font-mono)" textAnchor="middle" fill="currentColor" opacity="0.6">{reroute ? "task agent: clean the words" : "placeholder: says blocked, run ends"}</text>
         {reroute && (
           <>
             <path d="M540 150 C 590 150, 590 40, 542 40" fill="none" stroke={PURPLE} strokeWidth="1.2" strokeDasharray="4 3" markerEnd="url(#rt-arrow)" />
-            <text x="598" y="99" fontSize="9" fontFamily="monospace" fill={PURPLE} textAnchor="middle" transform="rotate(90 598 99)">cleaned</text>
+            <text x="598" y="99" fontSize="9" fontFamily="var(--font-mono)" fill={PURPLE} textAnchor="middle" transform="rotate(90 598 99)">cleaned</text>
           </>
         )}
       </svg>
       <figcaption className="mt-2 text-xs text-fg-muted">
-        {reroute ? "After 5b: the refused direction is cleaned and continues to the scripter instead of ending the run." : "The router returns a route name; the edge dict maps each name to a node. In 5a a blocked direction ends the run."}
+        {reroute ? "After 5c: the refused direction is cleaned and continues to the scripter instead of ending the run." : "The router returns a route name; the edge dict maps each name to a node. In 5b a blocked direction ends the run."}
       </figcaption>
     </figure>
   );
 }
 
 /* ───────────────────────── 5a ───────────────────────── */
+
+const STATE_POINTS = [
+  { t: "One dict for the run", d: "Shared state is a dict every node can read and write. Each write is an Event(state=...) delta; ADK merges the deltas, stores each as a row in the session, and the dev UI shows the merged result in its State tab." },
+  { t: "Read by parameter name", d: "A function node binds parameters from state by name. persist_direction's signature asks for candidates and constraints; nobody passes them. The gate wrote candidates, so it arrives." },
+  { t: "State is not output", d: "Output goes to the next node only. State is for any node, now or later: the scripter reads {constraints}, and step 6 reads direction and angle." },
+  { t: "The user: prefix", d: "A key that starts with user: is stored on the user, not the session. It survives into the next run and the next session. Here: the last direction picked." },
+  { t: "Two copies, two readers", d: "Session state is ADK's: the session store, the State tab, the next node's parameters. runs/state.json is the app's: _record_brief writes the same direction there, and the app that drives the workflow in step 9 reads it after the run without opening a session." },
+];
+
+const CODE_PERSIST = `# agent/graph.py
+def persist_direction(node_input, candidates: list = [], constraints: str = ""):
+    ni = node_input if isinstance(node_input, dict) else {}
+    raw = ni.get("pick")
+    pick = str(raw).strip() if raw is not None else ""
+    if candidates:
+        i = int(pick) - 1 if pick.isdigit() else 0
+        chosen = candidates[max(0, min(len(candidates) - 1, i))]
+    else:
+        chosen = {"title": "untitled", "angle": "", "evidence": []}
+    hook = chosen.get("hook") or " ".join(chosen["title"].split()[:4])
+    yield Event(state={"direction": chosen["title"], "angle": chosen.get("angle", ""),
+                       "hook": hook, "constraints": constraints or "(none yet)",
+                       "user:prefs": {"last_direction": chosen["title"]}})
+    _record_brief(chosen, hook)
+    yield Event(output=chosen)
+
+
+def _record_brief(chosen: dict, hook: str) -> None:
+    """The driver's copy, in runs/state.json: the file the run shares with
+    code outside ADK. The delivery writes the render there in step 8, and
+    the app reads it after the run."""
+    st = state.load()
+    st["brief"] = {"topic": chosen["title"], "angle": chosen.get("angle", ""),
+                   "hook": hook, "evidence": chosen.get("evidence", [])}
+    st["direction"] = chosen["title"]
+    st["hook"] = hook
+    state.save(st)`;
+
+function StateNode() {
+  const [idea, setIdea] = useState(DEFAULT_IDEA);
+  const [hintA, setHintA] = useState(0);
+  const [hintB, setHintB] = useState(0);
+  const { status, checking, check, open, setOpen } = useStage3();
+  const persistOk = status?.persist_wired ?? false;
+  const writeOk = status?.state_write_wired ?? false;
+  const keys = status?.state_keys ?? [];
+  const wrote = !!status?.direction;
+
+  return (
+    <div className="space-y-12">
+      <StepHeader
+        kicker="Step 5a · State"
+        color={RED}
+        title="Where a run keeps what it knows."
+        blurb="Your pick is one number. The rest of the graph needs the direction it names, and later nodes need it without being next in line. Shared state is how a run remembers within itself; this part writes to it and reads from it."
+      />
+
+      <CatchUp needs={["GATE_INPUT"]} color={RED} />
+
+      <In delay={0.1}>
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {STATE_POINTS.map((p, i) => (
+            <motion.div key={p.t} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.08 }} className="rounded-3xl border border-hairline bg-card p-5">
+              <p className="text-sm font-semibold" style={{ color: RED }}>
+                {p.t}
+              </p>
+              <p className="mt-2 text-sm text-fg-muted">{p.d}</p>
+            </motion.div>
+          ))}
+        </section>
+      </In>
+
+      <In delay={0.2}>
+        <section className="rounded-3xl border border-hairline bg-card p-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The node</p>
+          <h2 className="font-display mt-2 text-2xl">persist_direction: read the pick, write the direction.</h2>
+          <p className="mt-2 max-w-3xl text-sm text-fg-muted">
+            The gate's answer, <code className="font-mono text-fg">{"{"}"pick": "2"{"}"}</code>, arrives as <code className="font-mono text-fg">node_input</code>.
+            The <code className="font-mono text-fg">candidates</code> parameter is bound from state, where the gate wrote the four candidates in 4d.
+            The function resolves the number to a candidate, then does three things with it: writes the direction to shared state, records it in{" "}
+            <code className="font-mono text-fg">runs/state.json</code> through <code className="font-mono text-fg">_record_brief</code>, and outputs the
+            candidate dict for the next node. The state write is the line you fill in. <code className="font-mono text-fg">_record_brief</code> is the
+            second copy: a file on disk, outside ADK, holding the brief (topic, angle, hook, evidence) and the direction. In step 8 the delivery process writes the finished render into the same file and{" "}
+            <code className="font-mono text-fg">store_video</code> reads it back into shared state; the app of step 9 reads the direction after the run without
+            opening a session. Session state lives and dies with the session; the file is what the rest of the program sees. This step's app is{" "}
+            <code className="font-mono text-fg">stage3_router</code>; the function lives in <code className="font-mono text-fg">agent/graph.py</code>.
+          </p>
+          <div className="mt-4 overflow-hidden rounded-2xl border border-hairline bg-input">
+            <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/graph.py · persist_direction and _record_brief, complete</div>
+            <pre className="overflow-x-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
+              <code>{CODE_PERSIST}</code>
+            </pre>
+          </div>
+        </section>
+      </In>
+
+      <In delay={0.3}>
+        <EditPanel
+          label="Edit 1 of 2"
+          title="Append persist_direction to the chain."
+          intro={<>Only the <code className="font-mono text-fg">Workflow</code> is shown. The chain ends at the gate; add <code className="font-mono text-fg">persist_direction</code> after it so the answer has a reader.</>}
+          pill={status ? (persistOk ? "persist_direction in the chain ✓" : `chain ends at ${status.chain[status.chain.length - 1] ?? "…"}`) : "…"}
+          ok={persistOk}
+          hint={hintA}
+          setHint={setHintA}
+          hint1={<>One more name at the end of the third tuple, after <code className="font-mono">direction_gate</code>.</>}
+          hint2={`    edges=[(START, scan_trends, join_research),
+           (START, read_backlog, join_research),
+           (join_research, propose_directions, direction_gate,
+            persist_direction)])`}
+          path="stage3_router/agent.py"
+          symbol="root_agent"
+          pattern={/direction_gate\)\]\)|persist_direction\)\]\)/}
+          onSaved={check}
+        />
+      </In>
+
+      <In delay={0.35}>
+        <EditPanel
+          label="Edit 2 of 2"
+          title="Write the direction to state."
+          intro={<>Only <code className="font-mono text-fg">persist_direction</code> is shown. Replace the TODO line with a <code className="font-mono text-fg">yield Event(state={"{...}"})</code> carrying five keys: <code className="font-mono text-fg">direction</code>, <code className="font-mono text-fg">angle</code>, <code className="font-mono text-fg">hook</code>, <code className="font-mono text-fg">constraints</code>, and <code className="font-mono text-fg">user:prefs</code>.</>}
+          pill={status ? (writeOk ? "state write in place ✓" : "no Event(state=...) yet") : "…"}
+          ok={writeOk}
+          hint={hintB}
+          setHint={setHintB}
+          hint1={<>The values are already computed above the line: <code className="font-mono">chosen["title"]</code>, <code className="font-mono">chosen.get("angle", "")</code>, <code className="font-mono">hook</code>, <code className="font-mono">constraints or "(none yet)"</code>. For <code className="font-mono">user:prefs</code>, a dict with <code className="font-mono">last_direction</code>.</>}
+          hint2={`    yield Event(state={"direction": chosen["title"], "angle": chosen.get("angle", ""),
+                       "hook": hook, "constraints": constraints or "(none yet)",
+                       "user:prefs": {"last_direction": chosen["title"]}})`}
+          path="agent/graph.py"
+          symbol="persist_direction"
+          pattern={/TODO: PERSIST_STATE|Event\(state=/}
+          onSaved={check}
+        />
+      </In>
+
+      <In delay={0.4}>
+        <LoadCheck intro="Save both edits, then click the button. It loads your saved file the way adk web will and tells you either that it loads or what ADK objects to." />
+      </In>
+
+      <In delay={0.45}>
+        <RunPanel
+          app="stage3_router"
+          open={open}
+          setOpen={setOpen}
+          title="Run it, answer, then open the State tab."
+          intro="One model call, for the proposer. After you answer the form, persist_direction runs and the run ends."
+          idea={idea}
+          setIdea={setIdea}
+          steps={[
+            "Answer the form with 2. A State: direction chip follows the gate, then the run ends. The last event is persist_direction's output: the candidate you picked, as a dict.",
+            "Click the State tab on the left. candidates was written by the gate; direction, angle, hook, constraints, and user:prefs were written by your line. The verify panel below reads the same rows.",
+          ]}
+        />
+      </In>
+
+      <In delay={0.5}>
+        <VerifyPanel checking={checking} onCheck={check} intro="Read from agent/graph.py, this step's app file, and the latest stage3_router session's state.">
+          <CheckRow ok={persistOk} label="persist_direction follows the gate in the chain">
+            {status ? (persistOk ? status.chain.join(" → ") : "Edit 1 above.") : "…"}
+          </CheckRow>
+          <CheckRow ok={writeOk} label="persist_direction yields Event(state=...)">
+            {status ? (writeOk ? "Found in agent/graph.py." : "Edit 2 above.") : "…"}
+          </CheckRow>
+          <CheckRow ok={wrote} label="state.direction holds your pick">
+            {status?.direction ? `${status.direction}${status.angle ? ` · ${status.angle.slice(0, 60)}` : ""}` : "Not in state yet."}
+          </CheckRow>
+          <CheckRow ok={!!status?.user_prefs?.last_direction} label="state has user:prefs">
+            {status?.user_prefs?.last_direction ? `last_direction: ${status.user_prefs.last_direction}` : "Not in state yet."}
+          </CheckRow>
+          {keys.length ? (
+            <li className="md:col-span-2 rounded-2xl border border-hairline bg-overlay p-3 font-mono text-[11px] text-fg-muted">
+              state keys: {keys.join(" · ")}
+            </li>
+          ) : null}
+        </VerifyPanel>
+      </In>
+    </div>
+  );
+}
+
+/* ───────────────────────── 5b ───────────────────────── */
 
 const CODE_ROUTER_SAMPLE = `# a sample router
 def length_check(node_input):
@@ -216,11 +404,13 @@ function RouterNode() {
   return (
     <div className="space-y-12">
       <StepHeader
-        kicker="Step 5a · The router node"
+        kicker="Step 5b · The router node"
         color={RED}
         title="A decision the model does not make."
         blurb="Step 3 asked the model to refuse blacklisted subjects and it could be talked out of it. Here the refusal is a node: policy_check reads the chosen direction, returns a route, and the edge list decides what runs next."
       />
+
+      <CatchUp needs={["GATE_INPUT", "PERSIST_STATE"]} color={RED} />
 
       <In delay={0.1}>
         <section className="grid gap-3 md:grid-cols-3">
@@ -238,11 +428,10 @@ function RouterNode() {
       <In delay={0.2}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">Where the graph stands</p>
-          <h2 className="font-display mt-2 text-2xl">Step 5 starts where step 4 ended, plus one node.</h2>
+          <h2 className="font-display mt-2 text-2xl">The chain ends at persist_direction.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
-            This step's app, <code className="font-mono text-fg">stage3_router</code>, ships with the step 4 chain and{" "}
-            <code className="font-mono text-fg">persist_direction</code> after the gate: a function node that resolves your pick into the chosen
-            candidate, a dict with a title, an angle, and a hook, and writes it to shared state. That dict is what the router reads. The router is missing its last line. The two nodes it routes to are defined below.
+            After 5a the chain resolves your pick into the chosen candidate, a dict with a title, an angle, and a hook, and its output is that
+            dict. The router reads it next. The router is missing its last line. The two nodes it routes to are defined below.
           </p>
           <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_1fr]">
             <RouterFigure reroute={false} />
@@ -277,7 +466,7 @@ function RouterNode() {
             <code className="font-mono text-fg">agent/graph.py</code>, and its output schema is <code className="font-mono text-fg">Script</code>: a
             title, a description, tags, an opening line, and exactly three shots for the render model.{" "}
             <code className="font-mono text-fg">quarantine</code> is the other exit. It is a placeholder function that reports the block and ends
-            the run; 5b replaces it.
+            the run; 5c replaces it.
           </p>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
@@ -330,14 +519,14 @@ function RouterNode() {
         <EditPanel
           label="Edit 2 of 2"
           title="Wire the router."
-          intro={<>Only the <code className="font-mono text-fg">Workflow</code> is shown. Append <code className="font-mono text-fg">policy_check</code> to the chain, then add the edge whose target is a dict: <code className="font-mono text-fg">OK</code> to the scripter, <code className="font-mono text-fg">BLOCK</code> to quarantine.</>}
+          intro={<>Only the <code className="font-mono text-fg">Workflow</code> is shown. Append <code className="font-mono text-fg">policy_check</code> after <code className="font-mono text-fg">persist_direction</code>, then add the edge whose target is a dict: <code className="font-mono text-fg">OK</code> to the scripter, <code className="font-mono text-fg">BLOCK</code> to quarantine.</>}
           pill={status ? (routerOk ? "router wired ✓" : status.router_wired ? "policy_check in the chain; add the route dict" : `chain ends at ${status.chain[status.chain.length - 1] ?? "…"}`) : "…"}
           ok={routerOk}
           hint={hintB}
           setHint={setHintB}
           hint1={<>Two changes: <code className="font-mono">policy_check</code> becomes the last name of the third chain, and a fourth tuple starts with <code className="font-mono">policy_check</code> and ends with the dict from the figure above.</>}
           hint2={`    edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research),
+           (START, read_backlog, join_research),
            (join_research, propose_directions, direction_gate,
             persist_direction, policy_check),
            (policy_check, {"OK": scripter, "BLOCK": quarantine})])`}
@@ -384,15 +573,11 @@ function RouterNode() {
           </CheckRow>
         </VerifyPanel>
       </In>
-
-      <In delay={0.7}>
-        <StopAdk onClose={() => setOpen(false)} next="Step 5b reopens it." />
-      </In>
     </div>
   );
 }
 
-/* ───────────────────────── 5b ───────────────────────── */
+/* ───────────────────────── 5c ───────────────────────── */
 
 const MODES = [
   { mode: "chat", color: CYAN, who: "The step 3 agent, a root agent.", what: "A conversation. Each user message is a turn; the model decides when to call tools, when to ask, and when to stop. Required for a root agent; not allowed after another node." },
@@ -501,11 +686,13 @@ function TaskNode() {
   return (
     <div className="space-y-12">
       <StepHeader
-        kicker="Step 5b · Agent modes and the task node"
+        kicker="Step 5c · Agent modes and the task node"
         color={RED}
         title="Three ways an agent can run."
         blurb="Every agent in this lab so far answered once. The refused direction needs an agent that works: check the words, replace them, check again, and stop only when the direction is clean. That is a third mode."
       />
+
+      <CatchUp needs={["GATE_INPUT", "PERSIST_STATE", "POLICY_ROUTE"]} color={RED} />
 
       <In delay={0.1}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
@@ -539,7 +726,7 @@ function TaskNode() {
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">Quarantine, rebuilt</p>
           <h2 className="font-display mt-2 text-2xl">Replace the refused words, then hand the direction on.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
-            In 5a a blocked direction ended the run. Now it is repaired. The task agent receives the refused direction as its message, calls{" "}
+            In 5b a blocked direction ended the run. Now it is repaired. The task agent receives the refused direction as its message, calls{" "}
             <code className="font-mono text-fg">find_policy_hits</code> to learn which words tripped the gate, calls{" "}
             <code className="font-mono text-fg">suggest_replacement</code> for each one, rewrites the text, and checks again. It may take one
             round or several; it decides. When both the title and the angle come back clean it calls{" "}
@@ -587,7 +774,7 @@ function TaskNode() {
         <EditPanel
           label="Edit 1 of 2"
           title="Assemble the task node."
-          intro={<>Only <code className="font-mono text-fg">quarantine</code> is shown. Replace the placeholder function from 5a with an <code className="font-mono text-fg">Agent</code>: a name, the model, <code className="font-mono text-fg">mode="task"</code>, the instruction constant, the two tools, and the output schema.</>}
+          intro={<>Only <code className="font-mono text-fg">quarantine</code> is shown. Replace the placeholder function from 5b with an <code className="font-mono text-fg">Agent</code>: a name, the model, <code className="font-mono text-fg">mode="task"</code>, the instruction constant, the two tools, and the output schema.</>}
           pill={status ? (taskOk ? "task agent ✓" : status.quarantine_kind ? `quarantine is a ${status.quarantine_kind}` : "quarantine is None") : "…"}
           ok={taskOk}
           hint={hintA}
@@ -618,7 +805,7 @@ function TaskNode() {
           setHint={setHintB}
           hint1={<>A fifth tuple after the route dict: <code className="font-mono">(quarantine, scripter)</code>.</>}
           hint2={`    edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research),
+           (START, read_backlog, join_research),
            (join_research, propose_directions, direction_gate,
             persist_direction, policy_check),
            (policy_check, {"OK": scripter, "BLOCK": quarantine}),
@@ -675,10 +862,6 @@ function TaskNode() {
             {status?.script_title ? `script title: ${status.script_title}` : "Not yet."}
           </CheckRow>
         </VerifyPanel>
-      </In>
-
-      <In delay={0.7}>
-        <StopAdk onClose={() => setOpen(false)} next="Step 6 moves to the production run in Vibe Studio." />
       </In>
     </div>
   );

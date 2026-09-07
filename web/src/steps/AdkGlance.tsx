@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { In, StepHeader } from "../components/shared";
-import { COLORS } from "./colors";
+import { COLORS, tint } from "./colors";
 
 /*
  * Step 3a: what an ADK agent is made of. Diagram on the left, a canonical
@@ -42,7 +42,7 @@ const PIECES: Record<string, Piece> = {
   workflow: { id: "workflow", name: "workflow (graph, direct)", color: PURPLE, group: "collab", what: "How steps are orchestrated: a directed graph of nodes (fan-out, join, routers) or a direct sequence. The Workflow you build in this lab is one of these." },
   output: { id: "output", name: "output_schema", color: GREEN, group: "output", what: "A Pydantic model the agent's final answer must fill, so downstream code (an orchestrator, a UI) always receives structured JSON, never free-form prose." },
   session: { id: "session", name: "Session", color: PURPLE, group: "state", what: "Per-conversation state and the event log: the working memory of the current run. Lives outside the agent, in a SessionService." },
-  memory: { id: "memory", name: "Memory", color: PURPLE, group: "state", what: "Long-term memory that persists across sessions. Lives outside the agent, in a MemoryService such as Vertex AI Memory Bank." },
+  memory: { id: "memory", name: "Memory", color: PURPLE, group: "state", what: "Long-term memory that persists across sessions. Lives outside the agent, in a MemoryService such as GEAP Memory Bank." },
 };
 
 const CODE = `from google.adk.agents import LlmAgent
@@ -150,13 +150,13 @@ function Bar({ piece, onClick, full, children }: { piece: Piece; onClick: (id: s
     <button
       onClick={() => onClick(piece.id)}
       className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors"
-      style={{ background: full ? `${piece.color}18` : "var(--card)", border: `1px solid ${piece.color}${full ? "88" : "44"}` }}
+      style={{ background: full ? tint(piece.color, 0.09) : "var(--card)", border: `1px solid ${tint(piece.color, full ? 0.53 : 0.27)}` }}
     >
       <span className="text-sm font-semibold" style={{ color: piece.color }}>
         {piece.name}
       </span>
       {piece.hook && (
-        <span className="rounded px-1.5 py-0.5 font-mono text-[9px]" style={{ background: `${AMBER}22`, color: AMBER }} title="an interceptor runs before and after this call">
+        <span className="rounded px-1.5 py-0.5 font-mono text-[9px]" style={{ background: tint(AMBER, 0.13), color: AMBER }} title="an interceptor runs before and after this call">
           ⟲ before/after
         </span>
       )}
@@ -174,7 +174,7 @@ function MiniChip({ piece, onClick }: { piece: Piece; onClick: (id: string) => v
     <button
       onClick={() => onClick(piece.id)}
       className="flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors"
-      style={{ background: "var(--card)", border: `1px solid ${piece.color}44`, color: piece.color }}
+      style={{ background: "var(--card)", border: `1px solid ${tint(piece.color, 0.27)}`, color: piece.color }}
     >
       {piece.name}
     </button>
@@ -194,7 +194,7 @@ function Popup({ piece, onClose }: { piece: Piece; onClose: () => void }) {
     >
       <motion.div
         className="w-full max-w-md rounded-2xl border bg-card p-5"
-        style={{ borderColor: `${piece.color}66` }}
+        style={{ borderColor: tint(piece.color, 0.4) }}
         initial={{ scale: 0.92, y: 12 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.94, opacity: 0 }}
@@ -205,7 +205,7 @@ function Popup({ piece, onClose }: { piece: Piece; onClose: () => void }) {
           <h3 className="text-lg font-semibold" style={{ color: piece.color }}>
             {piece.name}
           </h3>
-          <span className="rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider" style={{ background: `${piece.color}1f`, color: piece.color }}>
+          <span className="rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider" style={{ background: tint(piece.color, 0.12), color: piece.color }}>
             {groupLabel}
           </span>
         </div>

@@ -1,24 +1,24 @@
 import { motion } from "framer-motion";
-import { Clapperboard, ListChecks, Sparkles, Workflow } from "lucide-react";
+import { BookOpen, Clapperboard, ListChecks, Sparkles, Timer, Workflow } from "lucide-react";
 import { In, StepHeader } from "../components/shared";
 import { COLORS } from "./colors";
 
 const CHORES = [
   "research what is trending",
-  "check the back catalog",
+  "comb through the backlog of ideas",
   "choose a direction",
+  "check it against the channel's policy",
   "write the script",
-  "generate the thumbnail",
-  "render the shots",
-  "review the result",
-  "publish",
+  "render the clip",
 ];
 
 const WANTS = [
   { icon: Workflow, text: "Runs the routine steps on its own, in a fixed order." },
   { icon: ListChecks, text: "Asks you only for the decisions that need your judgment." },
   { icon: Sparkles, text: "Refuses a bad direction before it costs money." },
-  { icon: Clapperboard, text: "Carries what one video taught you into the next." },
+  { icon: Clapperboard, text: "Remembers what you picked last time, and reads what the audience said." },
+  { icon: Timer, text: "Waits minutes for a render without a process kept alive for it." },
+  { icon: BookOpen, text: "Leaves a record of every run: what was cited, what was refused, what shipped." },
 ];
 
 export function Story() {
@@ -28,10 +28,10 @@ export function Story() {
         kicker="Step 1 · The story"
         color={COLORS.cyan}
         title="You run a channel on VibeTube."
-        blurb="You have a backlog of video ideas and no time for the production work each one requires."
+        blurb="You have a backlog of video ideas, an audience that leaves comments, and no time for the production work each video requires."
       />
 
-      {/* The backlog, as a wall of chores */}
+      {/* The work, as a wall of chores */}
       <In delay={0.15}>
         <div className="mx-auto grid max-w-4xl gap-4 md:grid-cols-[1.1fr_1fr]">
           <div className="rounded-3xl border border-hairline bg-card p-6 shadow-2xl">
@@ -51,7 +51,7 @@ export function Story() {
               ))}
             </ul>
             <p className="mt-4 text-sm text-fg-muted">
-              Current generative models can perform each of these tasks. That is not the hard part.
+              A model can do each of these: Gemini researches and writes, Veo renders. That is not the hard part.
             </p>
           </div>
 
@@ -85,9 +85,9 @@ export function Story() {
         <div className="mx-auto max-w-3xl rounded-2xl border border-hairline bg-card/60 px-6 py-5 text-center">
           <p className="text-balance text-base text-fg-muted md:text-lg">
             A pipeline with those properties is <span className="font-semibold text-fg">repeatable</span> and{" "}
-            <span className="font-semibold text-fg">auditable</span>, and you could hand it to another creator.
-            That is what you build in this lab. The application it powers is called{" "}
-            <span className="font-display text-fg">Vibe Studio</span>.
+            <span className="font-semibold text-fg">auditable</span>, and you could hand it to another creator. That is what you build
+            in this lab, one node at a time, as an ADK <span className="font-mono text-fg">Workflow</span>. In the last step it becomes an
+            app, <span className="font-display text-fg">Vibe Studio</span>, and ships to Cloud Run.
           </p>
         </div>
       </In>

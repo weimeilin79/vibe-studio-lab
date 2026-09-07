@@ -69,11 +69,6 @@ class Workers:
         argv = [sys.executable, "-m", f"agent.{verb}", *args]
         return await self._spawn(verb, argv)
 
-    async def start_shell(self, verb: str, script: str) -> tuple[bool, str]:
-        """The one driver that is a shell script (scripts/graph.sh)."""
-        if self.busy():
-            return False, f"{self.busy()} is still running"
-        return await self._spawn(verb, ["bash", script])
 
     async def start_script(self, verb: str, path: str, *args: str) -> tuple[bool, str]:
         """A plain Python script (scripts/reset.py) rather than an agent module."""

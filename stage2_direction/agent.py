@@ -14,7 +14,7 @@ from google.adk import Agent, Workflow
 from google.adk.workflow import START, JoinNode
 
 from agent import config
-from agent.graph import (PROPOSE_INSTRUCTION, direction_gate, read_backcatalog,
+from agent.graph import (PROPOSE_INSTRUCTION, direction_gate, read_backlog,
                          scan_trends)
 from agent.schemas import Directions
 
@@ -26,4 +26,4 @@ root_agent = Workflow(
     name="stage2_direction",
     description="research -> 4 candidates -> the human door",
     edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research)])  # TODO: STAGE2_EDGES - add the third chain, from the join
+           (START, read_backlog, join_research)])  # TODO: STAGE2_EDGES - add the third chain, from the join

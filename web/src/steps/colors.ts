@@ -1,9 +1,15 @@
-/** Step accent palette. Lives alone so pages and the registry can both import it. */
+/** Step accent palette. CSS variables, so the light theme can use darker
+ *  shades (see index.css). Use tint(color, alpha) for translucent fills. */
 export const COLORS = {
-  cyan: "#22d3ee",
-  purple: "#8b5cf6",
-  blue: "#3b82f6",
-  amber: "#f59e0b",
-  green: "#34d399",
-  red: "#f43f5e",
+  cyan: "var(--vibe-cyan)",
+  purple: "var(--vibe-purple)",
+  blue: "var(--vibe-blue)",
+  amber: "var(--vibe-amber)",
+  green: "var(--vibe-green)",
+  red: "var(--vibe-red)",
 };
+
+/** A translucent version of an accent (or of currentColor). */
+export function tint(color: string, alpha: number): string {
+  return `color-mix(in srgb, ${color} ${Math.round(alpha * 100)}%, transparent)`;
+}

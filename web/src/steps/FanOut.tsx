@@ -4,10 +4,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Check, Copy, ExternalLink, Lightbulb, RefreshCw, TerminalSquare, X } from "lucide-react";
 import { CodeEditor } from "../components/CodeEditor";
 import { In, StepHeader } from "../components/shared";
-import { StopAdk } from "../components/StopAdk";
+import { LoadCheck } from "../components/LoadCheck";
 import { api, useRunEvents } from "../lib/api";
 import type { InspectorStatus, Stage1Status, Stage2Status } from "../lib/types";
-import { COLORS } from "./colors";
+import { COLORS, tint } from "./colors";
 
 /*
  * Step 4, in parts:
@@ -81,20 +81,21 @@ const NODE_KINDS = [
 
 const EDGE_GRAMMAR = `edges=[
     (START, scan_trends, join_research),        # a chain: START, then scan_trends, then the join
-    (START, read_backcatalog, join_research),   # a second chain from START: the two readers fan out
+    (START, read_backlog, join_research),   # a second chain from START: the two readers fan out
     (join_research, propose_directions,         # two chains arrive at the JoinNode: it waits for both
      direction_gate, persist_direction,
      policy_check),
     (policy_check, {"OK": scripter,             # a dict target: the router's route name picks the edge
                     "BLOCK": quarantine}),
-    (scripter, store_script),
+    (quarantine, scripter),                     # the cleaned direction rejoins the main line
+    (scripter, render_desk, store_video),       # step 8: the render, then its result
 ]`;
 
 const REUSE = [
-  { app: "stage1_fanout", nodes: "scan_trends · read_backcatalog · join_research", edges: 2, what: "the research fan-out and join" },
+  { app: "stage1_fanout", nodes: "scan_trends · read_backlog · join_research", edges: 2, what: "the research fan-out and join" },
   { app: "stage2_direction", nodes: "+ propose_directions · direction_gate · persist_direction", edges: 3, what: "adds the agent node and the human pause" },
-  { app: "stage3_router", nodes: "+ policy_check · scripter · store_script · quarantine", edges: 5, what: "adds the router and the script" },
-  { app: "agent/graph.py · wf", nodes: "the same nodes, plus read_graph and read_memory later", edges: 7, what: "the production graph Vibe Studio runs" },
+  { app: "stage3_router", nodes: "+ policy_check · scripter · quarantine", edges: 5, what: "adds the router and the script" },
+  { app: "agent/graph.py · wf", nodes: "the same nodes, plus read_feedback (step 7) and render_desk, store_video (step 8)", edges: 16, what: "the production graph the app runs" },
 ];
 
 function GraphIntro() {
@@ -198,14 +199,14 @@ interface GNode {
 const GNODES: GNode[] = [
   { id: "START", label: "START", color: "var(--fg-muted)", x: 10, y: 50 },
   { id: "scan_trends", label: "scan_trends", color: "var(--fg)", x: 42, y: 22, sub: "function node" },
-  { id: "read_backcatalog", label: "read_backcatalog", color: "var(--fg)", x: 42, y: 78, sub: "function node" },
+  { id: "read_backlog", label: "read_backlog", color: "var(--fg)", x: 42, y: 78, sub: "function node" },
   { id: "join_research", label: "join_research", color: CYAN, x: 78, y: 50, sub: "JoinNode" },
 ];
 const GEDGES: [string, string][] = [
   ["START", "scan_trends"],
-  ["START", "read_backcatalog"],
+  ["START", "read_backlog"],
   ["scan_trends", "join_research"],
-  ["read_backcatalog", "join_research"],
+  ["read_backlog", "join_research"],
 ];
 
 interface Cand {
@@ -216,8 +217,8 @@ interface Cand {
 }
 const CANDS: Cand[] = [
   { id: "c1", code: "(START, scan_trends, join_research)", correct: true, why: "One chain: START, then scan_trends, then the join." },
-  { id: "c2", code: "(START, read_backcatalog, join_research)", correct: true, why: "A second chain from START. Two chains leaving START run in parallel." },
-  { id: "d1", code: "(START, scan_trends, read_backcatalog, join_research)", correct: false, why: "One chain runs its nodes in order. This makes the readers sequential; the graph runs them in parallel." },
+  { id: "c2", code: "(START, read_backlog, join_research)", correct: true, why: "A second chain from START. Two chains leaving START run in parallel." },
+  { id: "d1", code: "(START, scan_trends, read_backlog, join_research)", correct: false, why: "One chain runs its nodes in order. This makes the readers sequential; the graph runs them in parallel." },
   { id: "d2", code: "(join_research, scan_trends)", correct: false, why: "Reversed. Edges run left to right; a reader reports to the join, it does not run after it." },
   { id: "d3", code: "(START, join_research)", correct: false, why: "The join has nothing to wait for. The readers never run." },
   { id: "d5", code: "(START, scan_trends)", correct: false, why: "Half a chain. scan_trends would finish and nothing would carry its output into the join." },
@@ -257,7 +258,7 @@ function EdgesExercise() {
   };
 
   return (
-    <section className="rounded-3xl border p-6" style={{ borderColor: `${AMBER}66`, background: `${AMBER}0a` }}>
+    <section className="rounded-3xl border p-6" style={{ borderColor: tint(AMBER, 0.4), background: tint(AMBER, 0.04) }}>
       <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: AMBER }}>
         Exercise
       </p>
@@ -268,7 +269,7 @@ function EdgesExercise() {
       </p>
 
       <div className="mt-5 overflow-x-auto rounded-2xl border border-hairline bg-card">
-        <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto block w-full max-w-[720px]" role="img" aria-label="START fans out to scan_trends and read_backcatalog, both join at join_research">
+        <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto block w-full max-w-[720px]" role="img" aria-label="START fans out to scan_trends and read_backlog, both join at join_research">
           <defs>
             <marker id="fo-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
               <path d="M0,0 L10,5 L0,10 z" fill="var(--fg-muted)" />
@@ -290,7 +291,7 @@ function EdgesExercise() {
                 {start ? (
                   <circle cx={p.x} cy={p.y} r="24" fill="var(--overlay)" stroke="var(--fg-muted)" strokeWidth="1.5" />
                 ) : (
-                  <rect x={p.x - 62} y={p.y - 22} width="124" height="44" rx="10" fill={n.id === "join_research" ? `${CYAN}18` : "var(--overlay)"} stroke={n.id === "join_research" ? CYAN : "var(--hairline)"} strokeWidth="1.5" />
+                  <rect x={p.x - 62} y={p.y - 22} width="124" height="44" rx="10" fill={n.id === "join_research" ? tint(CYAN, 0.09) : "var(--overlay)"} stroke={n.id === "join_research" ? CYAN : "var(--hairline)"} strokeWidth="1.5" />
                 )}
                 <text x={p.x} y={p.y + (n.sub ? -1 : 4)} textAnchor="middle" fontSize="11.5" fontFamily="var(--font-mono)" fill={n.color}>
                   {n.label}
@@ -370,15 +371,12 @@ export const DEFAULT_IDEA = "a tiny robot doing laundry at midnight";
 const READER_CODE = `# agent/graph.py
 def scan_trends(node_input):
     from world import platform
-    return Event(output={"trends": platform.trends()})
+    return Event(output={"trends": platform.trends()})   # ten of 250, at random
 
 
-def read_backcatalog(node_input):
-    from world import platform
-    creds = state.load().get("creds")
-    vids = platform.outcomes(creds["creator_id"]) if creds else []
-    ...
-    return Event(output={"backcatalog": slim})`;
+def read_backlog(node_input):
+    return Event(output={"backlog": backlog_notes(),      # agent/backlog.txt, 15 notes
+                         "idea": idea_text(node_input)})  # tonight's idea, from your message`;
 
 const JOIN_CODE = `from google.adk.workflow import JoinNode
 
@@ -387,12 +385,12 @@ join_research = JoinNode(name="join_research")
 
 # its output, once both readers have reported,
 # is one dict keyed by node name:
-# {"scan_trends":      {"trends": [...]},
-#  "read_backcatalog": {"backcatalog": [...]}}`;
+# {"scan_trends":  {"trends": [...10 topics...]},
+#  "read_backlog": {"backlog": [...15 notes...], "idea": "..."}}`;
 
 const STAGE1_NODES = [
-  { name: "scan_trends", kind: "function node", color: "var(--fg)", what: "Calls the Wall's trends endpoint, the same one the step 3 tool wrapped, and returns the list as its output." },
-  { name: "read_backcatalog", kind: "function node", color: "var(--fg)", what: "Reads the creator's published videos with their watch statistics. Empty until the first publish in step 6." },
+  { name: "scan_trends", kind: "function node", color: "var(--fg)", what: "Reads what is trending: ten of 250 trends, each a format paired with a look, with a heat score. A different ten every run." },
+  { name: "read_backlog", kind: "function node", color: "var(--fg)", what: "Reads the creator's backlog, fifteen ideas in agent/backlog.txt, and takes tonight's idea from your message. Both travel together into the join." },
   { name: "join_research", kind: "JoinNode", color: CYAN, what: "Built into ADK. Waits until every incoming branch has reported, then passes all of their outputs on as one dict." },
 ];
 
@@ -405,7 +403,7 @@ function Stage1Graph() {
     return { x: (n.x / 100) * W, y: (n.y / 100) * H };
   };
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto block w-full max-w-[640px]" role="img" aria-label="START fans out to scan_trends and read_backcatalog, two function nodes; both feed join_research, a JoinNode.">
+    <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto block w-full max-w-[640px]" role="img" aria-label="START fans out to scan_trends and read_backlog, two function nodes; both feed join_research, a JoinNode.">
       <defs>
         <marker id="s1-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
           <path d="M0,0 L10,5 L0,10 z" fill="var(--fg-muted)" />
@@ -425,15 +423,15 @@ function Stage1Graph() {
           return (
             <g key={n.id}>
               <circle cx={p.x} cy={p.y} r="24" fill="var(--overlay)" stroke="var(--fg-muted)" strokeWidth="1.5" />
-              <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="10" fontFamily="monospace" fill="var(--fg-muted)">START</text>
+              <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fill="var(--fg-muted)">START</text>
             </g>
           );
         const join = n.id === "join_research";
         return (
           <g key={n.id}>
-            <rect x={p.x - 66} y={p.y - 24} width="132" height="48" rx="10" fill={join ? `${CYAN}18` : "var(--overlay)"} stroke={join ? CYAN : "var(--hairline)"} strokeWidth="1.5" />
-            <text x={p.x} y={p.y - 2} textAnchor="middle" fontSize="11" fontFamily="monospace" fill={n.color}>{n.label}</text>
-            <text x={p.x} y={p.y + 14} textAnchor="middle" fontSize="9" fontFamily="monospace" fill="var(--fg-muted)">{n.sub}</text>
+            <rect x={p.x - 66} y={p.y - 24} width="132" height="48" rx="10" fill={join ? tint(CYAN, 0.09) : "var(--overlay)"} stroke={join ? CYAN : "var(--hairline)"} strokeWidth="1.5" />
+            <text x={p.x} y={p.y - 2} textAnchor="middle" fontSize="11" fontFamily="var(--font-mono)" fill={n.color}>{n.label}</text>
+            <text x={p.x} y={p.y + 14} textAnchor="middle" fontSize="9" fontFamily="var(--font-mono)" fill="var(--fg-muted)">{n.sub}</text>
           </g>
         );
       })}
@@ -583,12 +581,16 @@ function DeclareFanOut() {
     name="stage1_fanout",
     description="2 real readers -> join -> one research dict",
     edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research)])`}
+           (START, read_backlog, join_research)])`}
           path="stage1_fanout/agent.py"
           symbol="root_agent"
           pattern={/^\s*edges=/}
           onSaved={check}
         />
+      </In>
+
+      <In delay={0.35}>
+        <LoadCheck app="stage1_fanout" intro="Save both edits, then click the button. It loads stage1_fanout the way adk web will and tells you either that it loads or what ADK objects to." />
       </In>
 
       <In delay={0.4}>
@@ -602,7 +604,7 @@ function DeclareFanOut() {
           setIdea={setIdea}
           steps={[
             "Two nodes light together on the map, then the join.",
-            "Open join_research's event. Its output is one dict: a scan_trends key holding the trends, and a read_backcatalog key holding an empty backcatalog, because nothing is published yet.",
+            "Open join_research's event. Its output is one dict: a scan_trends key with ten trending topics, and a read_backlog key with the fifteen backlog notes and your idea.",
           ]}
         />
       </In>
@@ -624,8 +626,8 @@ function DeclareFanOut() {
           <CheckRow ok={!!status?.joined} label="The join fired once with both outputs">
             {status ? (status.joined ? "join_research produced its dict." : "Not yet.") : "…"}
           </CheckRow>
-          <CheckRow ok={status?.backcatalog_empty === true} label="backcatalog is empty">
-            {status?.backcatalog_empty == null ? "Run first." : status.backcatalog_empty ? "Nothing is published yet. It fills after step 6." : "Not empty: something has been published."}
+          <CheckRow ok={(status?.backlog_count ?? 0) > 0} label="The backlog reached the join">
+            {status?.backlog_count == null ? "Run first." : `${status.backlog_count} notes from agent/backlog.txt, with your idea`}
           </CheckRow>
           {status?.bundle ? (
             <li className="md:col-span-2 overflow-hidden rounded-2xl border border-hairline bg-overlay">
@@ -634,10 +636,6 @@ function DeclareFanOut() {
             </li>
           ) : null}
         </VerifyPanel>
-      </In>
-
-      <In delay={0.6}>
-        <StopAdk onClose={() => setOpen(false)} next="Step 4c reopens it for stage 2." />
       </In>
     </div>
   );
@@ -687,35 +685,35 @@ function SchemaFigure() {
         </defs>
         {/* schema */}
         <rect x="8" y="20" width="196" height="118" rx="12" {...box} />
-        <text x="20" y="42" fontSize="11" fontFamily="monospace" fill={AMBER}>response_schema</text>
-        <text x="20" y="60" fontSize="10.5" fontFamily="monospace" fill="currentColor" opacity="0.7">"type": "object"</text>
+        <text x="20" y="42" fontSize="11" fontFamily="var(--font-mono)" fill={AMBER}>response_schema</text>
+        <text x="20" y="60" fontSize="10.5" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.7">"type": "object"</text>
         <rect x="20" y="70" width="172" height="26" rx="6" fill="none" stroke={AMBER} strokeOpacity="0.6" />
-        <text x="28" y="87" fontSize="10.5" fontFamily="monospace" fill="currentColor">pick: 1 | 2 | 3 | 4</text>
-        <text x="20" y="122" fontSize="9.5" fontFamily="monospace" fill="currentColor" opacity="0.6">not required; blank means 1</text>
+        <text x="28" y="87" fontSize="10.5" fontFamily="var(--font-mono)" fill="currentColor">pick: 1 | 2 | 3 | 4</text>
+        <text x="20" y="122" fontSize="9.5" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.6">not required; blank means 1</text>
         {/* form */}
         <rect x="256" y="20" width="160" height="118" rx="12" {...box} />
-        <text x="268" y="42" fontSize="11" fontFamily="monospace" fill="currentColor" opacity="0.8">the form in adk web</text>
-        <text x="268" y="66" fontSize="10.5" fontFamily="monospace" fill="currentColor" opacity="0.7">pick</text>
+        <text x="268" y="42" fontSize="11" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.8">the form in adk web</text>
+        <text x="268" y="66" fontSize="10.5" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.7">pick</text>
         <rect x="268" y="72" width="136" height="20" rx="4" fill="none" stroke="currentColor" strokeOpacity="0.4" />
-        <text x="276" y="86" fontSize="10.5" fontFamily="monospace" fill="currentColor">2</text>
+        <text x="276" y="86" fontSize="10.5" fontFamily="var(--font-mono)" fill="currentColor">2</text>
         <rect x="268" y="108" width="52" height="20" rx="4" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeOpacity="0.4" />
-        <text x="294" y="122" fontSize="9.5" fontFamily="monospace" fill="currentColor" textAnchor="middle">Submit</text>
+        <text x="294" y="122" fontSize="9.5" fontFamily="var(--font-mono)" fill="currentColor" textAnchor="middle">Submit</text>
         {/* answer */}
         <rect x="468" y="20" width="144" height="118" rx="12" {...box} />
-        <text x="480" y="42" fontSize="11" fontFamily="monospace" fill="currentColor" opacity="0.8">the answer</text>
-        <text x="480" y="84" fontSize="10.5" fontFamily="monospace" fill="currentColor">{"{"}"pick": "2"{"}"}</text>
+        <text x="480" y="42" fontSize="11" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.8">the answer</text>
+        <text x="480" y="84" fontSize="10.5" fontFamily="var(--font-mono)" fill="currentColor">{"{"}"pick": "2"{"}"}</text>
         {/* arrows */}
         <line x1="204" y1="79" x2="254" y2="79" stroke="currentColor" strokeWidth="1.2" markerEnd="url(#rs-arrow)" />
-        <text x="229" y="70" fontSize="9.5" fontFamily="monospace" fill="currentColor" opacity="0.7" textAnchor="middle">renders</text>
+        <text x="229" y="70" fontSize="9.5" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.7" textAnchor="middle">renders</text>
         <line x1="416" y1="79" x2="466" y2="79" stroke="currentColor" strokeWidth="1.2" markerEnd="url(#rs-arrow)" />
-        <text x="441" y="70" fontSize="9.5" fontFamily="monospace" fill="currentColor" opacity="0.7" textAnchor="middle">submit</text>
+        <text x="441" y="70" fontSize="9.5" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.7" textAnchor="middle">submit</text>
         {/* validate + node_input */}
         <path d="M540 138 L540 176" stroke={AMBER} strokeWidth="1.2" markerEnd="url(#rs-arrow)" fill="none" />
-        <text x="548" y="160" fontSize="9.5" fontFamily="monospace" fill={AMBER}>validated</text>
+        <text x="548" y="160" fontSize="9.5" fontFamily="var(--font-mono)" fill={AMBER}>validated</text>
         <rect x="256" y="180" width="356" height="50" rx="12" {...box} />
-        <text x="268" y="200" fontSize="11" fontFamily="monospace" fill="currentColor" opacity="0.8">persist_direction(node_input, ...)</text>
-        <text x="268" y="219" fontSize="10.5" fontFamily="monospace" fill="currentColor">reads "pick" by name</text>
-        <text x="8" y="205" fontSize="10.5" fontFamily="monospace" fill="currentColor" opacity="0.7">step 5, next node</text>
+        <text x="268" y="200" fontSize="11" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.8">persist_direction(node_input, ...)</text>
+        <text x="268" y="219" fontSize="10.5" fontFamily="var(--font-mono)" fill="currentColor">reads "pick" by name</text>
+        <text x="8" y="205" fontSize="10.5" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.7">step 5, next node</text>
         <line x1="132" y1="201" x2="254" y2="201" stroke="currentColor" strokeOpacity="0.4" strokeWidth="1" strokeDasharray="3 3" />
       </svg>
       <figcaption className="mt-2 text-xs text-fg-muted">The schema is rendered as the form, the answer is validated against it, and the next node reads the same key.</figcaption>
@@ -728,8 +726,8 @@ function SchemaFigure() {
 function PausedGraphFigure() {
   const node = (cx: number, cy: number, label: string, accent = false, dashed = false) => (
     <g key={label}>
-      <rect x={cx - 54} y={cy - 13} width="108" height="26" rx="8" fill={accent ? `${AMBER}1f` : "var(--overlay)"} stroke={accent ? AMBER : "var(--hairline)"} strokeDasharray={dashed ? "4 3" : undefined} />
-      <text x={cx} y={cy + 4} fontSize="9.5" fontFamily="monospace" textAnchor="middle" fill={accent ? AMBER : "currentColor"} opacity={dashed ? 0.6 : 1}>
+      <rect x={cx - 54} y={cy - 13} width="108" height="26" rx="8" fill={accent ? tint(AMBER, 0.12) : "var(--overlay)"} stroke={accent ? AMBER : "var(--hairline)"} strokeDasharray={dashed ? "4 3" : undefined} />
+      <text x={cx} y={cy + 4} fontSize="9.5" fontFamily="var(--font-mono)" textAnchor="middle" fill={accent ? AMBER : "currentColor"} opacity={dashed ? 0.6 : 1}>
         {label}
       </text>
     </g>
@@ -744,9 +742,9 @@ function PausedGraphFigure() {
           </marker>
         </defs>
         <circle cx="30" cy="85" r="12" fill="var(--overlay)" stroke="currentColor" strokeOpacity="0.6" />
-        <text x="30" y="89" fontSize="8.5" fontFamily="monospace" textAnchor="middle" fill="currentColor">START</text>
+        <text x="30" y="89" fontSize="8.5" fontFamily="var(--font-mono)" textAnchor="middle" fill="currentColor">START</text>
         {node(120, 45, "scan_trends")}
-        {node(120, 125, "read_backcatalog")}
+        {node(120, 125, "read_backlog")}
         {node(242, 85, "join_research")}
         {node(364, 85, "propose_directions")}
         {node(486, 85, "direction_gate", true)}
@@ -758,10 +756,10 @@ function PausedGraphFigure() {
         {edge(296, 85, 308, 85)}
         {edge(418, 85, 430, 85)}
         <line x1="486" y1="98" x2="486" y2="150" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.2" strokeDasharray="4 3" markerEnd="url(#pg-arrow)" />
-        <text x="494" y="128" fontSize="9" fontFamily="monospace" fill="currentColor" opacity="0.6">step 5</text>
-        <text x="418" y="118" fontSize="9.5" fontFamily="monospace" fill={AMBER} textAnchor="end">paused here</text>
-        <text x="418" y="131" fontSize="9.5" fontFamily="monospace" fill="currentColor" opacity="0.7" textAnchor="end">an open adk_request_input call</text>
-        <text x="418" y="144" fontSize="9.5" fontFamily="monospace" fill="currentColor" opacity="0.7" textAnchor="end">resumes on function_response(interrupt_id)</text>
+        <text x="494" y="128" fontSize="9" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.6">step 5</text>
+        <text x="418" y="118" fontSize="9.5" fontFamily="var(--font-mono)" fill={AMBER} textAnchor="end">paused here</text>
+        <text x="418" y="131" fontSize="9.5" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.7" textAnchor="end">an open adk_request_input call</text>
+        <text x="418" y="144" fontSize="9.5" fontFamily="var(--font-mono)" fill="currentColor" opacity="0.7" textAnchor="end">resumes on function_response(interrupt_id)</text>
       </svg>
       <figcaption className="mt-2 text-xs text-fg-muted">Where the graph stands after edit 2. The run ends after your answer because the gate is the last node; step 5 starts with the node that reads it.</figcaption>
     </figure>
@@ -861,7 +859,7 @@ function HumanInTheLoop() {
             {["join_research", "propose_directions", "direction_gate"].map((n, i) => (
               <span key={n} className="flex items-center gap-2">
                 {i > 0 && <span className="text-fg-muted">→</span>}
-                <span className="rounded-lg border px-2.5 py-1" style={i < 2 ? { borderColor: "var(--hairline)", background: "var(--overlay)" } : { borderColor: `${AMBER}88`, background: `${AMBER}1a`, color: AMBER }}>
+                <span className="rounded-lg border px-2.5 py-1" style={i < 2 ? { borderColor: "var(--hairline)", background: "var(--overlay)" } : { borderColor: tint(AMBER, 0.53), background: tint(AMBER, 0.1), color: AMBER }}>
                   {n}
                 </span>
               </span>
@@ -885,7 +883,7 @@ function HumanInTheLoop() {
     name="stage2_direction",
     description="research -> 3 candidates in state -> the human door",
     edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research),
+           (START, read_backlog, join_research),
            (join_research, propose_directions, direction_gate)])`}
           path="stage2_direction/agent.py"
           symbol="root_agent"
@@ -1036,6 +1034,10 @@ function HumanInTheLoop() {
         </section>
       </In>
 
+      <In delay={0.45}>
+        <LoadCheck app="stage2_direction" intro="Save, then click the button. It loads stage2_direction the way adk web will and tells you either that it loads or what ADK objects to." />
+      </In>
+
       <In delay={0.5}>
         <RunPanel
           app="stage2_direction"
@@ -1068,10 +1070,6 @@ function HumanInTheLoop() {
           </CheckRow>
         </VerifyPanel>
       </In>
-
-      <In delay={0.7}>
-        <StopAdk onClose={() => setOpen(false)} next="Step 5 reopens it for the policy gate." />
-      </In>
     </div>
   );
 }
@@ -1087,19 +1085,17 @@ const AGENT_NODE_POINTS = [
 
 const CODE_INSTRUCTION = `# agent/graph.py
 PROPOSE_INSTRUCTION = (
-    "You run the creator's short-video channel. "
-    "The message you received is tonight's research "
-    "bundle as JSON: one key per reader node ..."
-    "PITCH exactly FOUR candidate directions for the "
-    "next <=20s video. Each candidate: a title, an angle, "
-    "and a hook ..."
-    "Candidates 1 to 3 are publishable directions ..."
-    "Candidate 4 is the outrage-bait direction the channel "
-    "must never publish ... Its title MUST contain at least "
-    "one of these words: competitor, scam, revenge, "
-    "humiliate, fake, dangerous stunt ..."
-    "Every evidence entry must cite a REAL source ... "
-    "never invent evidence.")`;
+    "You run the creator's short-video channel. The message "
+    "you received is tonight's research bundle as JSON: "
+    "scan_trends holds ten trending topics with heat; "
+    "read_backlog holds the creator's notes and tonight's idea."
+    "Merge the backlog notes closest to the idea, then find "
+    "the trend each merged idea can ride ..."
+    "PITCH exactly FOUR candidate directions ... Candidates 1 to 3 "
+    "each cite a backlog note and a trend ..."
+    "Candidate 4 is the outrage-bait direction ... Its title MUST "
+    "contain one of: competitor, scam, revenge, humiliate, fake, "
+    "dangerous stunt ...")`;
 
 const CODE_DIRECTIONS = `# agent/schemas.py
 class Direction(BaseModel):
@@ -1163,7 +1159,7 @@ function AgentNode() {
         kicker="Step 4c · The agent node"
         color={AMBER}
         title="The first agent node."
-        blurb="Stage 2 puts an agent after the join. You define it in stage2_direction/agent.py, add it to the chain, and run it: the join's research dict goes in, four typed candidates come out."
+        blurb="Stage 2 puts an agent after the join. You define it in stage2_direction/agent.py, add it to the chain, and run it: the join's research dict goes in, trends, backlog and your idea, and four typed candidates come out."
       />
 
       <In delay={0.1}>
@@ -1192,7 +1188,7 @@ function AgentNode() {
             {["join_research", "propose_directions"].map((n, i) => (
               <span key={n} className="flex items-center gap-2">
                 {i > 0 && <span className="text-fg-muted">→</span>}
-                <span className="rounded-lg border px-2.5 py-1" style={i < 1 ? { borderColor: "var(--hairline)", background: "var(--overlay)" } : { borderColor: `${AMBER}88`, background: `${AMBER}1a`, color: AMBER }}>
+                <span className="rounded-lg border px-2.5 py-1" style={i < 1 ? { borderColor: "var(--hairline)", background: "var(--overlay)" } : { borderColor: tint(AMBER, 0.53), background: tint(AMBER, 0.1), color: AMBER }}>
                   {n}
                 </span>
               </span>
@@ -1277,11 +1273,11 @@ function AgentNode() {
           setHint={setHintB}
           hint1={<>Two names in the new tuple: <code className="font-mono">join_research</code>, then <code className="font-mono">propose_directions</code>. Watch the closing brackets.</>}
           hint2={`    edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research),
+           (START, read_backlog, join_research),
            (join_research, propose_directions)])`}
           path="stage2_direction/agent.py"
           symbol="root_agent"
-          pattern={/^\s*edges=|read_backcatalog, join_research\)\]\)|propose_directions\)\]\)/}
+          pattern={/^\s*edges=|read_backlog, join_research\)\]\)|propose_directions\)\]\)/}
           onSaved={check}
         />
       </In>
@@ -1301,7 +1297,7 @@ function AgentNode() {
             </button>
           </div>
           {load && (
-            <div className="mt-3 rounded-xl border p-3 font-mono text-[11.5px]" style={load.ok ? { borderColor: `${GREEN}66`, color: GREEN, background: `${GREEN}10` } : { borderColor: `${RED}66`, color: RED, background: `${RED}10` }}>
+            <div className="mt-3 rounded-xl border p-3 font-mono text-[11.5px]" style={load.ok ? { borderColor: tint(GREEN, 0.4), color: GREEN, background: tint(GREEN, 0.06) } : { borderColor: tint(RED, 0.4), color: RED, background: tint(RED, 0.06) }}>
               {load.ok ? `loads · ${load.edges} edges` : load.error}
             </div>
           )}
@@ -1340,10 +1336,6 @@ function AgentNode() {
           </CheckRow>
         </VerifyPanel>
       </In>
-
-      <In delay={0.7}>
-        <StopAdk onClose={() => setOpen(false)} next="Step 4d reopens it for the human pause." />
-      </In>
     </div>
   );
 }
@@ -1380,7 +1372,7 @@ export function EditPanel({
   onSaved: () => void;
 }) {
   return (
-    <section className="rounded-3xl border p-6" style={{ borderColor: `${AMBER}66`, background: `${AMBER}0a` }}>
+    <section className="rounded-3xl border p-6" style={{ borderColor: tint(AMBER, 0.4), background: tint(AMBER, 0.04) }}>
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: AMBER }}>
@@ -1390,7 +1382,7 @@ export function EditPanel({
           <p className="mt-2 max-w-2xl text-sm text-fg-muted">{intro}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border px-3 py-1 font-mono text-[11px]" style={ok ? { borderColor: `${GREEN}66`, color: GREEN, background: `${GREEN}14` } : { borderColor: "var(--hairline)", color: "var(--fg-muted)" }}>
+          <span className="rounded-full border px-3 py-1 font-mono text-[11px]" style={ok ? { borderColor: tint(GREEN, 0.4), color: GREEN, background: tint(GREEN, 0.08) } : { borderColor: "var(--hairline)", color: "var(--fg-muted)" }}>
             {pill}
           </span>
           <button onClick={() => setHint((h) => Math.min(h + 1, 2))} className="flex items-center gap-1.5 rounded-full border border-hairline bg-card px-3 py-1 text-xs text-fg-muted hover:text-fg">
@@ -1438,7 +1430,7 @@ export function RunPanel({
   }, []);
   const url = `/inspector/dev-ui/?app=${app}`;
   return (
-    <section className="rounded-3xl border p-6" style={{ borderColor: `${BLUE}55`, background: `${BLUE}0a` }}>
+    <section className="rounded-3xl border p-6" style={{ borderColor: tint(BLUE, 0.33), background: tint(BLUE, 0.04) }}>
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: BLUE }}>
@@ -1544,7 +1536,7 @@ export function CheckRow({ ok, label, children }: { ok: boolean; label: string; 
   const color = ok ? GREEN : "var(--fg-muted)";
   return (
     <li className="flex items-start gap-3 rounded-2xl border border-hairline bg-overlay p-3">
-      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border" style={{ borderColor: color, color, background: ok ? `${color}1a` : "transparent" }}>
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border" style={{ borderColor: color, color, background: ok ? tint(color, 0.1) : "transparent" }}>
         {ok ? <Check size={13} /> : <X size={12} className="opacity-40" />}
       </span>
       <div>

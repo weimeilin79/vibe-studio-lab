@@ -1,12 +1,12 @@
 author: Annie Wang (cuppibla)
-summary: Design agentic workflows as graphs with the Agent Development Kit (ADK): parallel nodes and joins, an agent as a node, RequestInput for human decisions, deterministic routers, and driver-owned join logic. Then add state and persistent memory: session state and the user: prefix, a BigQuery property graph, and Vertex AI Memory Bank, each wired into the graph as one edge.
+summary: Design agentic workflows as graphs with the Agent Development Kit (ADK): parallel nodes and joins, an agent as a node, RequestInput for human decisions, deterministic routers, and driver-owned join logic. Then add state, memory, and knowledge: session state and the user: prefix, GEAP Memory Bank through callbacks, and a GEAP RAG Engine corpus as one more reader in the fan-out.
 id: vibestudio
-categories: adk,agents,bigquery,memory-bank,gemini
+categories: adk,agents,memory-bank,rag-engine,gemini,veo
 environments: Web
 status: Draft
 feedback link: https://github.com/cuppibla/vibe-studio-lab/issues
 
-# Long-Running Workflows and Durable State with ADK
+# VibeStudio - Agentic Workflow with ADK
 
 ## Introduction
 Duration: 0:03:00
@@ -17,7 +17,7 @@ This codelab covers agentic workflow design with the Agent Development Kit (ADK)
 
 ### The scenario
 
-You run a channel on VibeTube. You have a backlog of video ideas and no time for the production work each one requires: researching what is trending, checking your back catalog, choosing a direction, writing the script, generating the thumbnail and the shots, reviewing the result, and publishing. Current generative models can perform each of those tasks.
+You run a channel on VibeTube. You have a backlog of video ideas and no time for the production work each one requires: researching what is trending, combing through your backlog of ideas, choosing a direction, writing the script, generating the thumbnail and the shots, reviewing the result, and publishing. Current generative models can perform each of those tasks.
 
 The remaining problem is process. You want a pipeline that runs the routine steps on its own, asks you only for decisions that require your judgment, refuses a bad direction before it costs money, and carries what one video taught you into the next. A pipeline with those properties is repeatable and auditable, and you could hand it to another creator. That is the pipeline you build in this lab. The application it powers is called Vibe Studio.
 
@@ -28,12 +28,13 @@ The remaining problem is process. You want a pipeline that runs the routine step
 - `RequestInput` to suspend the graph for a human decision, with a response schema that a frontend renders as a form
 - Shared run state: nodes write with `Event(state=...)` and read through `parameter_binding='state'`
 - A deterministic router node whose return value selects the outgoing edge
+- An agent in `task` mode that works with tools until it calls `finish_task`
+- GEAP Memory Bank (`memories.generate` and `memories.retrieve`) through `before_model_callback` and `after_agent_callback`
+- GEAP RAG Engine: a corpus of audience comments, read by one more node in the fan-out
 - `LongRunningFunctionTool`, the `pending` receipt, and resuming a call by id with a `function_response`
-- `DatabaseSessionService`, session state, and the `user:` key prefix
-- A BigQuery property graph (GQL `MATCH`) as a research node
-- Vertex AI Memory Bank (`memories.generate` and `memories.retrieve`) as a research node
+- The `Runner`, an app on top of it, and a Cloud Run deployment
 
-The diagram shows the graph you build. Each box is code you will read. The two greyed research nodes are connected in the final two steps, one edge each.
+The diagram shows the graph you build. Each box is code you will read. The steps build on each other: three edits in `agent/graph.py` (steps 4d, 5a, 5b) are used by every later step. If you start at a later step, the Vibe Studio page for it shows which of those edits are still open and fills them for you with one click.
 
 ![The production pipeline](codelab-img/d10-productionline.png)
 
@@ -41,8 +42,8 @@ The diagram shows the graph you build. Each box is code you will read. The two g
 
 | Part | Steps | What you do | What it covers |
 |---|---|---|---|
-| **1. Workflow graph design** | A single prompt, The research fan-out, The policy gate, Approve and publish | Run the pipeline as one prompt, rebuild it as a graph with a fan-out, a join, an agent node, a human input node, and a router, then run it as a product and publish a video | Why a graph replaces a prompt, `RequestInput`, deterministic routing, `LongRunningFunctionTool` and the `function_response` resume path, and join logic written in your driver |
-| **2. State and persistent memory** | BigQuery graph, Session state, Memory Bank | Read persisted state before a run exists, then add two research nodes to the graph | The `user:` prefix, a property graph declared over BigQuery tables, and a managed Memory Bank read on every run |
+| **1. Workflow graph design** | A single prompt, The research fan-out, The policy gate | Run the pipeline as one prompt, then rebuild it as a graph: a fan-out and join, an agent node, a human pause, a router, a task-mode agent | `Workflow`, `JoinNode`, `Agent` as a node, `RequestInput`, routes, `mode="task"` |
+| **2. Memory, knowledge, and the world** | Memory Bank, RAG Engine, The video, Deploy, Summary | Give the agents memory and knowledge through callbacks and a third reader, render the video as a long-running call, ship the workflow with an app on top | Memory Bank, RAG Engine, `LongRunningFunctionTool`, `Runner`, Cloud Run |
 
 Design rules applied throughout:
 
@@ -57,7 +58,7 @@ Duration: 0:09:00
 
 ![Vibe Studio architecture: frontend, backend, inspector, cloud](codelab-img/d5-architecture.png)
 
-**Vibe Studio** (left) is the frontend. Each button runs one backend command. **Your backend** (middle) has two agents (the workflow and the render desk), plain Python drivers, and the `runs/` directory where pending calls and state keys are stored. **adk web** (bottom) is a read-only inspector over the same `sessions.db`. The **cloud** column holds the two long-lived stores: BigQuery and Memory Bank.
+**Vibe Studio** (left) is the lab app: one server that serves the lab pages, an editor that writes to the real files, and the ADK dev UI mounted at `/inspector`. **Your backend** (middle) is one `Workflow` built up step by step in the stage apps, plus `agent/graph.py` where its nodes live. **Cloud** (right) is Gemini for the agents, Memory Bank, RAG Engine, and Veo.
 
 In this step you clone the repository, install dependencies, and run a preflight check. Each server is started in the step that first needs it.
 
@@ -132,24 +133,24 @@ In **tab 1**, open `.env` in the Cloud Shell Editor:
 cloudshell edit ~/vibe-studio-lab/.env
 ```
 
-Fill in the platform block. The third line is the name the room credits you under:
+Fill in the publishing block. The app in step 9 posts finished clips to an event on vibetube.dev; the third line is the name you are credited under:
 
 ```
-VIBETUBE_URL=https://<the-platform-url-your-instructor-gives>
-VIBETUBE_EVENT=sandbox
+VIBETUBE_URL=https://vibetube.dev
+VIBETUBE_EVENT=<the event code your instructor gives>
 VIBETUBE_NAME=Your Name
 ```
 
-Self-paced with no instructor: skip this and leave the block commented out. Publishing works locally, and preflight prints `room: not configured (local only — publishing still works)`. After filling in the block, `python scripts/preflight.py` prints `✓ room: connected`.
+Self-paced with no instructor: leave the block commented out. Everything up to publishing works without it, and the app's profile drawer takes the same three values later.
 
 ### Reference (optional)
 
 <aside class="positive">
-<b>Repository layout.</b> <code>agent/</code> is the backend you read and edit. <code>vibestudio/</code> is the adk web entry point for the production app. <code>stage0_prompt/</code> through <code>stage3_router/</code> are the four sandbox apps used in the workflow steps. <code>server/</code> and <code>web/</code> are Vibe Studio, the app you run from <code>scripts/start.sh</code>. <code>world/</code> is the platform (the Wall API) and the thumbnail generator; <code>agent/videogen.py</code> talks to Veo. <code>bqgraph/</code> is the BigQuery step. <code>checks/</code> holds the verification checks.
+<b>Repository layout.</b> <code>agent/</code> is the backend you read and edit: the graph's nodes, the memory client, the Veo client. <code>stage0_prompt/</code> through <code>stage4_memory/</code> are the sandbox apps, one per step, each a subset of the same graph. <code>starter/</code> holds the versions students receive; the finished agent lives in the app, <code>vibestudio/server/agent/</code>. <code>server/</code> and <code>web/</code> are the lab pages. <code>vibestudio/</code> is the app of step 9: its own server, its own web, and its own complete copy of the agent. <code>checks/</code> holds the hole registry and its verifiers.
 </aside>
 
 <aside class="positive">
-<b>Verification checks.</b> <code>python -m checks.check &lt;name&gt;</code> runs about ten assertions against the real artifacts (sessions, state, the wall, BigQuery, the bank). Each step's reference section names its check. All checks are optional. Read any of them with <code>cloudshell edit ~/vibe-studio-lab/checks/check.py</code>.
+<b>Verification checks.</b> Every hands-on part of Vibe Studio ends with a verify panel that reads the real artifacts: the file on disk and the sessions adk web wrote. <code>python -m checks.check &lt;name&gt;</code> runs the same kind of assertions from a terminal. All checks are optional.
 </aside>
 
 ## The pipeline as a single prompt
@@ -163,11 +164,10 @@ Choose a short video idea now. Name a scene in a few words, for example `a tiny 
 
 ![The production pipeline: a graph for research, the world for renders, a backstop for publishing](codelab-img/d10-productionline.png)
 
-The diagram has three bands.
+The diagram shows the workflow.
 
-- **Top band, the workflow graph.** Research fans out, joins, produces three candidate directions, pauses for your choice, passes a policy gate, and writes a script. The stages below build this band. The two greyed research nodes, the audience graph and the memory bank, are connected in the final two steps.
-- **Middle band, the desk.** Renders and the thumbnail approval wait in a plain agent session, not in the graph.
-- **Bottom band, the publish backstop.** A second, smaller workflow runs once before publishing.
+- **The workflow graph.** Research fans out, joins, produces four candidate directions, pauses for your choice, passes a policy gate, and writes a script. The stages below build this band. 
+- **What joins it later.** Memory through two callbacks (step 6), the audience's feedback through a retrieval tool (step 7), the video as a long-running call (step 8).
 
 ### Start adk web
 
@@ -221,29 +221,25 @@ At the top left, click **Select an app** and choose **`stage0_prompt`**.
 
 The instruction in `stage0_prompt/agent.py` describes the whole pipeline in prose:
 
-*Check what is trending. Look at your back catalog. Propose a direction and agree on it with the creator. Refuse blacklisted subjects. Describe the video.*
+*Check what is trending. Look at your backlog of ideas. Propose a direction and agree on it with the creator. Refuse blacklisted subjects. Describe the video.*
 
 Each sentence becomes a node over the next two steps. The two tools on this agent read the same sources the graph's research nodes read.
 
 ### The two tools
 
-The agent's `tools=[check_trends, read_back_catalog]` are plain Python functions in the same file:
+The agent's `tools=[check_trends, read_backlog]` are plain Python functions in the same file:
 
 ```python
 def check_trends() -> dict:
-    """Read what is trending on the platform right now."""
+    """Ten formats trending on the platform right now, with a heat score each."""
     from world import platform
     return {"trends": platform.trends()}
 
 
-def read_back_catalog() -> dict:
-    """List the channel's already-published videos and how they performed."""
-    from agent import state
-    from world import platform
-    creds = state.load().get("creds")
-    vids = platform.outcomes(creds["creator_id"]) if creds else []
-    return {"backcatalog": [{"title": v["title"], "avg_watch_pct": v["avg_watch_pct"]}
-                            for v in vids]}
+def read_backlog() -> dict:
+    """The creator's backlog: ideas they noted down to make someday."""
+    from agent.graph import backlog_notes
+    return {"backlog": backlog_notes()}
 ```
 
 ADK builds a tool declaration for each function from its name, signature, and docstring. When the model decides it needs the data, it emits a `function_call`; ADK runs the function and appends a `function_response` event with the return value, and the model continues with that data in context.
@@ -254,16 +250,16 @@ The agent's tool list is empty:
     tools=[],  # TODO: TOOLS - add the two research tools
 ```
 
-Without tools the model can only guess at trends and invent a back catalog. Add the two functions to the list. In Vibe Studio, step 3c has an editor for this file; from a terminal, open `stage0_prompt/agent.py` and change the line to:
+Without tools the model can only guess at trends and invent a backlog. Add the two functions to the list. In Vibe Studio, step 3c has an editor for this file; from a terminal, open `stage0_prompt/agent.py` and change the line to:
 
 <!-- code: TOOLS -->
 ```python
-    tools=[check_trends, read_back_catalog],
+    tools=[check_trends, read_backlog],
 ```
 
 The list takes the function objects, not strings. adk web runs with agent reloading on, so the next message uses the edited file.
 
-Both functions call `world/platform.py`, an HTTP client for the Wall API that the Vibe Studio server hosts. `trends()` sends `GET /api/trends` and receives a fixed seed list of topics with a heat score; if the server is not reachable it returns the same list from the module. `outcomes(creator_id)` sends `GET /api/outcomes` and receives the channel's published videos with retention numbers from `runs/wall.db`. That table is empty until the first publish, so the back catalog is empty in this step. The workflow graph reads the same two sources in the next step; only the shape changes.
+`check_trends` calls `agent/trends.py`: ten trends drawn at random from a pool of 250, each with a heat score, so no two calls return the same ten. A trend is a format, a twist, or a style an idea can ride, never a subject. `read_backlog` reads `agent/backlog.txt`, the creator's own notes: fifteen ideas, one per line. These two sources feed every step of the lab. The pipeline's job is to combine them: find the backlog ideas closest to what the creator wants tonight and ride the trend that fits.
 
 In the chat box, type your idea:
 
@@ -271,7 +267,7 @@ In the chat box, type your idea:
 tonight's idea: a tiny robot doing laundry at midnight
 ```
 
-Two tool-call events appear, `check_trends` and `read_back_catalog`, each followed by its response, then the reply:
+Two tool-call events appear, `check_trends` and `read_backlog`, each followed by its response, then the reply:
 
 ![Stage 0: the single-prompt pipeline](codelab-img/st0-run.png)
 
@@ -294,7 +290,7 @@ Concepts used in this step:
 - The pieces of an `LlmAgent`: model, instruction, skills, tools, output schema, callbacks
 - `Agent` with `tools=[...]`: Python functions exposed to the model
 - `function_call` and `function_response` events in the session
-- The Wall API as the platform contract behind both research tools
+- Two data sources beside the graph: the trend pool and the backlog file
 
 ## The research fan-out and the human pause
 Duration: 0:08:00
@@ -305,7 +301,7 @@ In this step you rebuild the research part of the pipeline as a workflow graph, 
 
 ![Stage 1: the research fan-out](codelab-img/stage-1-fanout.png)
 
-Stage 1 is the front of the graph: two reader nodes leave START in parallel and a `JoinNode` waits for both. The readers are plain Python functions imported from `agent/graph.py`. A function node takes `node_input` and returns an `Event`; `scan_trends` returns `Event(output={"trends": [...]})` and `read_backcatalog` returns `Event(output={"backcatalog": [...]})`. The join is an ADK built-in: it waits until every incoming branch has reported, then outputs one dict keyed by node name. There is no formatting step after it. The next node, added in stage 2, is an agent, and an agent node receives its `node_input` as its message; a dict arrives as JSON.
+Stage 1 is the front of the graph: two reader nodes leave START in parallel and a `JoinNode` waits for both. The readers are plain Python functions imported from `agent/graph.py`. A function node takes `node_input` and returns an `Event`; `scan_trends` returns `Event(output={"trends": [...]})`, ten trends, each a format paired with a look, and `read_backlog` returns `Event(output={"backlog": [...], "idea": "..."})`, the fifteen notes plus the idea from your message. The join is an ADK built-in: it waits until every incoming branch has reported, then outputs one dict keyed by node name. There is no formatting step after it. The next node, added in stage 2, is an agent, and an agent node receives its `node_input` as its message; a dict arrives as JSON.
 
 `stage1_fanout/agent.py` ships with the join undefined and the edge list empty:
 
@@ -330,7 +326,7 @@ An edge entry is a chain of nodes that run in order. Two chains that leave the s
 <!-- code: FANOUT_EDGES -->
 ```python
     edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research)])
+           (START, read_backlog, join_research)])
 ```
 
 Switch the dropdown to **`stage1_fanout`** and send the idea:
@@ -347,7 +343,7 @@ Compared with stage 0:
 
 - Both readers ran, in parallel, because the edge list says so. The model cannot skip one.
 - The output of `join_research` is one dict with both readers' results. Open its event to read it.
-- `backcatalog` is empty because you have published nothing yet. It fills after the first publish.
+- `read_backlog` carries the fifteen notes and the idea you typed; the proposer will merge the notes closest to the idea and pick the trend they can ride.
 - Two readers are wired. The final graph has four. The other two are added in the final two steps, one edge each.
 
 ### Stage 2: four candidates and the human pause
@@ -363,20 +359,20 @@ root_agent = Workflow(
     name="stage2_direction",
     description="research -> 3 candidates -> the human door",
     edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research)])  # TODO: STAGE2_EDGES - add the third chain, from the join
+           (START, read_backlog, join_research)])  # TODO: STAGE2_EDGES - add the third chain, from the join
 ```
 
 ### The agent node
 
 `propose_directions` is the same `Agent` class as step 3, with a name, a model, an instruction, and an output schema, and without tools. Used as a node, an agent runs in `single_turn` mode by default: its input is the previous node's output, here the join's dict delivered as JSON, it answers once, and the answer goes to the next node. There is no conversation.
 
-`config.MODEL` is the Gemini model step 3 used. `PROPOSE_INSTRUCTION` is a string constant in `agent/graph.py`, imported into the stage file; it asks for exactly three candidate directions, each with a title, an angle, and a hook, with evidence cited from the research. `Directions` is the output schema, from `agent/schemas.py`:
+`config.MODEL` is the Gemini model step 3 used. `PROPOSE_INSTRUCTION` is a string constant in `agent/graph.py`, imported into the stage file; it asks for exactly four candidate directions, each with a title, an angle, and a hook, with evidence cited from the research; when the creator gave an idea, candidates 1 to 3 are versions of that idea, with the trends and the backlog adding elements to it rather than replacing it. `Directions` is the output schema, from `agent/schemas.py`:
 
 ```python
 class Direction(BaseModel):
     title: str           # <=60 chars, filmable, characterful
     angle: str           # the twist, one line
-    hook: str = ""       # 2-4 words printed as the thumbnail's sticker
+    hook: str = ""       # 2-4 words, the video's sticker line
     evidence: list[Evidence]
 
 
@@ -400,7 +396,7 @@ Then start a third chain from the join. In step 4c the chain is `(join_research,
 <!-- code: STAGE2_EDGES -->
 ```python
     edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research),
+           (START, read_backlog, join_research),
            (join_research, propose_directions, direction_gate)])
 ```
 
@@ -412,7 +408,7 @@ An `Agent` has a `mode`. A plain agent, like the stage 0 agent, runs in `chat` m
 
 ### Human in the loop
 
-A pipeline that publishes videos and spends money on renders needs a person at the decisions that require judgment: which direction to film, whether the thumbnail is right. In a single prompt, that is a request in the instruction, and step 3 showed that a message can override it. In a workflow, the decision is a node. The graph suspends there, the session records an open call, and only an answer to that call resumes it. No process waits in the meantime.
+A pipeline that publishes videos and spends money on renders needs a person at the decisions that require judgment: which direction to film, whether a script is worth rendering. In a single prompt, that is a request in the instruction, and step 3 showed that a message can override it. In a workflow, the decision is a node. The graph suspends there, the session records an open call, and only an answer to that call resumes it. No process waits in the meantime.
 
 The node is `direction_gate` in `agent/graph.py`. It writes the candidates to state and returns without pausing:
 
@@ -478,11 +474,58 @@ Duration: 0:11:00
 
 In this step you add the router that completes the graph, define the two nodes it routes to, rebuild one of them as a task-mode agent, read the edge list in `agent/graph.py`, start Vibe Studio, and run the graph as a production run.
 
-### Part a: the router node
+### Part a: state
+
+Your pick is one number. The rest of the graph needs the direction it names, and later nodes need it without being next in line. Shared state is a dict every node in a run can read and write. Each write is an `Event(state=...)` delta; ADK merges the deltas, stores each as a row in the session, and adk web shows the merged result in its State tab. State is not output: output goes to the next node only, state is for any node, now or later. A key that starts with `user:` is stored on the user rather than the session, so it survives into the next run.
+
+`persist_direction` in `agent/graph.py` shows both sides. Its signature asks for `candidates` and `constraints`; nobody passes them. A function node binds parameters from state by name, and the gate wrote `candidates` in the previous step. The gate's answer, `{"pick": "2"}`, arrives as `node_input`:
+
+```python
+def persist_direction(node_input, candidates: list = [], constraints: str = ""):
+    ni = node_input if isinstance(node_input, dict) else {}
+    raw = ni.get("pick")
+    pick = str(raw).strip() if raw is not None else ""
+    if candidates:
+        i = int(pick) - 1 if pick.isdigit() else 0
+        chosen = candidates[max(0, min(len(candidates) - 1, i))]
+    else:
+        chosen = {"title": "untitled", "angle": "", "evidence": []}
+    hook = chosen.get("hook") or " ".join(chosen["title"].split()[:4])
+    # TODO: PERSIST_STATE - yield an Event whose state holds direction, angle, hook, constraints, and user:prefs
+    _record_brief(chosen, hook)
+    yield Event(output=chosen)
+
+
+def _record_brief(chosen: dict, hook: str) -> None:
+    """The driver's copy, in runs/state.json: the file the run shares with
+    code outside ADK. The delivery writes the render there in step 8, and
+    the app reads it after the run."""
+    st = state.load()
+    st["brief"] = {"topic": chosen["title"], "angle": chosen.get("angle", ""),
+                   "hook": hook, "evidence": chosen.get("evidence", [])}
+    st["direction"] = chosen["title"]
+    st["hook"] = hook
+    state.save(st)
+```
+
+The function does three things with the chosen candidate: writes the direction to shared state (your line), records it in `runs/state.json` through `_record_brief`, and outputs the candidate dict for the next node. The two copies have two readers. Session state is ADK's: the session store, the State tab in adk web, the parameters of later nodes. The file is the app's: code outside ADK reads and writes it. In step 8 the delivery process writes the finished render there and `store_video` reads it back into shared state; the app of step 9 reads the direction after the run without opening a session. Session state lives and dies with the session; the file is what the rest of the program sees.
+
+This step's app, `stage3_router`, ships with the step 4 chain, ending at the gate. Append `persist_direction` to it so the answer has a reader, then write the state (in Vibe Studio, step 5a):
+
+<!-- code: PERSIST_STATE -->
+```python
+    yield Event(state={"direction": chosen["title"], "angle": chosen.get("angle", ""),
+                       "hook": hook, "constraints": constraints or "(none yet)",
+                       "user:prefs": {"last_direction": chosen["title"]}})
+```
+
+Run `stage3_router` in adk web and answer the form with `2`. A `State: direction` chip follows the gate and the run ends with the candidate you picked as the last output. Open the State tab: `candidates` was written by the gate; `direction`, `angle`, `hook`, `constraints`, and `user:prefs` were written by your line. The scripter reads `{constraints}` from that state in the next part, and step 6 reads `direction` and `angle`.
+
+### Part b: the router node
 
 ![The step 5 graph: the deterministic router](codelab-img/stage-3-router.png)
 
-This step's app, `stage3_router`, ships with the step 4 chain and one more node after the gate: `persist_direction`, a function node that resolves your pick into the chosen candidate, a dict with a title, an angle, and a hook, and writes it to shared state. That dict is what the router reads.
+After part a the chain ends at `persist_direction`, whose output is the chosen candidate: a dict with a title, an angle, and a hook. That dict is what the router reads.
 
 A router is a plain function whose `Event` carries a route name next to its output. A sample:
 
@@ -504,7 +547,7 @@ The real router is `policy_check` in `agent/graph.py`. `policy_words()` reads `a
     # TODO: POLICY_ROUTE - return an Event whose output is node_input and whose route is "BLOCK" if bad else "OK"
 ```
 
-Write the return (in Vibe Studio, step 5a):
+Write the return (in Vibe Studio, step 5b):
 
 <!-- code: POLICY_ROUTE -->
 ```python
@@ -523,24 +566,25 @@ scripter = Agent(
     output_schema=Script)
 ```
 
-`quarantine` is the other exit, a placeholder function that reports the block and ends the run; part b replaces it:
+`quarantine` is the other exit, a placeholder function that reports the block and ends the run; part c replaces it:
 
 ```python
-def quarantine(node_input):  # TODO: QUARANTINE - 5b replaces this placeholder with the task agent
+def quarantine(node_input):  # TODO: QUARANTINE - 5c replaces this placeholder with the task agent
     return Event(output={"blocked": True, "title": node_input.get("title", "")},
                  message="blocked: the channel's policy refused this direction")
 ```
 
-Then wire the router: append `policy_check` to the chain and add the edge with the dict target. The chain ends at `persist_direction`:
+Then wire the router: append `policy_check` after `persist_direction` and add the edge with the dict target. As the app ships, the whole third chain is the student's:
 
 ```python
-            persist_direction)])  # TODO: ROUTER_EDGES - append policy_check, then its two routes
+           (join_research, propose_directions, direction_gate)])  # TODO: ROUTER_EDGES - 5a: append persist_direction; 5b: append policy_check, then its two routes
 ```
 
-Part a adds `policy_check` and the route edge; part b adds the last line, which gives the full list:
+Part a appended `persist_direction`; part b adds `policy_check` and the route edge; part c adds the last line, which gives the full list:
 
 <!-- code: ROUTER_EDGES -->
 ```python
+           (join_research, propose_directions, direction_gate,
             persist_direction, policy_check),
            (policy_check, {"OK": scripter, "BLOCK": quarantine}),
            (quarantine, scripter)])
@@ -562,7 +606,7 @@ Answer the form with `1` and press **Submit**. The policy node's event shows `ro
 
 The run takes the BLOCK edge to `quarantine`, which reports the block, and ends. `scripter` stays grey. Nothing was scripted, rendered, or paid for. The route and the matched words are recorded in `lineage.gates.policy` in `runs/state.json`.
 
-### Part b: agent modes and the task node
+### Part c: agent modes and the task node
 
 `mode` is an argument on `Agent`, with three values:
 
@@ -572,7 +616,7 @@ The run takes the BLOCK edge to `quarantine`, which reports the block, and ends.
 | `single_turn` | One model call, no conversation. Input from the previous node, one structured object out. The default for an agent used as a node. | `propose_directions`, `scripter`. |
 | `task` | The model works with its tools for as many calls as it needs and ends by calling the built-in `finish_task` tool. What it hands to `finish_task`, typed by `output_schema`, is the node's output. | `quarantine`, from here on. |
 
-In part a a blocked direction ended the run. Now it is repaired. The task agent receives the refused direction as its message, calls `find_policy_hits` to learn which words tripped the gate, calls `suggest_replacement` for each one, rewrites the text, and checks again, for as many rounds as it needs. When the title and the angle both come back clean it calls `finish_task` with the cleaned direction, and that becomes the node's output, in the same shape the scripter already reads.
+In part b a blocked direction ended the run. Now it is repaired. The task agent receives the refused direction as its message, calls `find_policy_hits` to learn which words tripped the gate, calls `suggest_replacement` for each one, rewrites the text, and checks again, for as many rounds as it needs. When the title and the angle both come back clean it calls `finish_task` with the cleaned direction, and that becomes the node's output, in the same shape the scripter already reads.
 
 The two tools are in `agent/cleanup_tools.py`. Both are plain functions; ADK reads the signature and the docstring:
 
@@ -594,7 +638,7 @@ def suggest_replacement(word: str) -> dict:
     """
 ```
 
-`agent/policy_replacements.txt` is data, like the policy: one `refused => replacement` line per word. `QUARANTINE_INSTRUCTION` in `agent/graph.py` spells out the loop, and `CleanedDirection` in `agent/schemas.py` is the output schema: a title, an angle, and a hook. Replace the placeholder with the task agent (in Vibe Studio, step 5b):
+`agent/policy_replacements.txt` is data, like the policy: one `refused => replacement` line per word. `QUARANTINE_INSTRUCTION` in `agent/graph.py` spells out the loop, and `CleanedDirection` in `agent/schemas.py` is the output schema: a title, an angle, and a hook. Replace the placeholder with the task agent (in Vibe Studio, step 5c):
 
 <!-- code: QUARANTINE -->
 ```python
@@ -615,27 +659,15 @@ Then add the last edge, `(quarantine, scripter)`, so the cleaned direction conti
 
 | Stage 0 prompt sentence | Replaced by | Result |
 |---|---|---|
-| "check trends, look at the back catalog" | 2 reader nodes + `join_research` | Both run, in parallel, on every run |
+| "check trends, look at the backlog" | 2 reader nodes + `join_research` | Both run, in parallel, on every run |
 | "propose a direction and agree on it with the creator" | `propose_directions` → `direction_gate` (`RequestInput`) | Four typed candidates in state, and a pause the model cannot skip |
 | "refuse blacklisted subjects" | `policy_check` + a labeled edge + `policy_words.txt`, then `quarantine` as a task agent | A recorded route, decided before any spend; a refused direction repaired with tools instead of ending the run |
 | "describe the video" | `scripter` (an `Agent` node) | The model writes the script after the gate |
 | The implied sequence ("then… then…") | The edge list | Order is declared, not inferred |
 
-### The edge list
+### The production copy
 
-`wf = Workflow(...)` at the bottom of `agent/graph.py` declares the graph you built in stages:
-
-<!-- code: EDGES -->
-```python
-        (START, scan_trends, join_research),
-        (START, read_backcatalog, join_research),
-        (join_research, propose_directions, direction_gate,
-         persist_direction, policy_check),
-        (policy_check, {"OK": scripter, "BLOCK": quarantine}),
-        (scripter, store_script),
-```
-
-The Studio app's driver imports `wf` from this file. Two lines below it are commented out and marked `TODO: GRAPH_EDGE` and `TODO: MEMORY_EDGE`. Each connects one research feed. You uncomment them in the final two steps. With the tools edit in step 3 and the three edits in step 4, they are the six code edits in this lab.
+`wf = Workflow(...)` at the bottom of `agent/graph.py` declares the same graph the stage apps built up, plus the two additions of steps 7 and 8. Step 9 reads that list whole, when the app that drives it is the subject.
 
 `direction_gate` suspends the graph with this call:
 
@@ -651,56 +683,12 @@ The Studio app's driver imports `wf` from this file. Two lines below it are comm
 
 A node that yields `RequestInput` suspends the graph. The `response_schema` is what a frontend renders as a form and what the answer is validated against; the `payload` carries the candidates for that frontend to show.
 
-### Start Vibe Studio
-
-The stages ran in the inspector. The production run happens in Vibe Studio, which drives the same graph. adk web stays running on port 8000; Vibe Studio is a separate server on port 4600.
-
-In a third terminal tab (**tab 3**), start the app server:
-
-```console
-cd ~/vibe-studio-lab
-source .venv/bin/activate
-scripts/start.sh
-```
-
-Click **Web Preview → Change port → 4600**:
-
-![Vibe Studio idle: enter an idea, or leave it empty](codelab-img/s2-idle.png)
-
-### Run the pipeline
-
-You make three inputs in a production run: the idea, the direction, and the thumbnail approval (in the next step). The research, proposal, policy check, script, render submission, and publish run without input.
-
-On the Now card, type your idea (or leave it empty and the pipeline chooses its own), then press **Start a lap ▸**:
-
-```
-a tiny robot doing laundry at midnight
-```
-
-A map appears above the card. The two research nodes light together, then `join_research` and `propose_directions`. After about 20 seconds, the marker stops on `direction_gate` with three candidates below it:
-
-![The live map: research done, four candidates waiting for your pick](codelab-img/s2-flow-form.png)
-
-Two facts about the map:
-
-- Its nodes and edges are read from the live `Workflow` object (`wf.graph.edges`, each edge carrying `from_node.name` and `to_node.name`). The layout table only positions nodes. A node the layout table does not know is still drawn. When the graph gains a node in part 2, the map shows it.
-- A node turns solid when the run writes that node's output to `runs/state.json`. Nothing is on a timer.
-
-The card lists the four candidates as radio buttons with candidate 1 selected. Choose one and press **Continue ▸**. The footer states what the click sends: one `function_response`, explained in the next step.
-
-![The direction card: candidate 1 already picked, Continue is the one click](codelab-img/s2-direction-click.png)
-
-The graph continues: `persist_direction`, `policy_check` on its **OK** edge, then `scripter` and `store_script`. Within a few seconds the render row reads **rendering with Veo**. One clip for the whole script was submitted, and the thumbnail is being generated.
-
-![Renders started automatically; the run finishes after you judge the thumbnail](codelab-img/s2c-rendering.png)
-
-Stop here. The next step covers the thumbnail approval.
-
 Concepts used in this step:
 
+- Shared state: `Event(state=...)` deltas, parameters bound from state by name, the `user:` prefix
 - A function node as a router, with an edge dict keyed by route name
 - Policy stored as data and read at decision time
-- The production app driving the same `Workflow` object as the sandbox apps
+- An agent in `task` mode: tools until `finish_task`, output typed by `output_schema`
 
 ### Reference (optional)
 
@@ -709,673 +697,354 @@ Concepts used in this step:
 </aside>
 
 <aside class="positive">
-<b>BLOCK in Vibe Studio.</b> A "write my own" direction containing a policy word ends the run at <code>quarantine</code>. The app reads <code>lineage.gates.policy</code> and shows <i>"Blocked — by your own policy. Nothing was scripted, rendered or paid."</i> with a new idea box.
-</aside>
-
-<aside class="positive">
 <b>JoinNode.</b> The research branches converge on a <code>JoinNode</code>. It waits for every connected feed, then passes all of their outputs on as one dict. Connecting a new feed in part 2 does not change the join.
 </aside>
 
-<aside class="positive">
-<b>Optional checks.</b> In tab 1: <code>python -m checks.check workflow</code> (the graph ran and its evidence citations are real) and <code>python -m checks.check hitl</code> (candidates in state, your pick became the direction, the policy gate recorded a route).
-</aside>
+## Memory: what the channel remembers about its creator
+Duration: 0:10:00
 
-## Approve the thumbnail and publish
-Duration: 0:07:00
+Every run so far started from zero. The creator has a history: animals first, then gadgets, and lately fantasy. In this step that history lives in GEAP Agent Engine Memory Bank, and the proposer reads it before it pitches. The graph does not change shape: memory is two callbacks on two agents.
 
-In this step you approve the video's thumbnail. The run then delivers the render, passes the publish backstop, and publishes the video to your channel. If Setup joined a room, it also posts to the room's VibeTube.
+### Part a: Memory Bank
 
-This step also covers how the run waits: `LongRunningFunctionTool`, the `pending` receipt, and resuming a call by id. It then covers the one decision ADK leaves to your code: when the run is finished.
-
-Current state: your direction passed the policy gate, the script was written, and the render was submitted. The desk agent holds one pending render call. The app holds one pending question for you. ADK delivers both answers by call id. Your code decides when the four together mean "done".
-
-### Long-running tools
-
-![LongRunningFunctionTool: the job is dispatched and a receipt is returned immediately](codelab-img/d6-lrft.png)
-
-When the script reaches the desk agent, it calls the tool once. The `LongRunningFunctionTool` wrapper starts the Veo operation (green) and returns a receipt to the agent (orange). The agent replies WAITING and the turn ends. No process blocks. The only record is a row in `sessions.db`.
-
-`agent/desk.py` defines the desk as a plain `Agent` with one wrapped tool:
+Memory Bank is long-term memory about a person. It holds facts about one user under a scope, here the creator as `app_name` plus `user_id`. You hand it a conversation; it extracts the facts worth keeping and consolidates them with what it already knows, so three sessions picking cats become one memory about cats. Custom memory topics say what a memory is allowed to be about. This lab defines two:
 
 ```python
-def render_submit(prompt: str) -> dict:
-    """Submit the video render to Veo. Returns at once; the result arrives later."""
-    from . import videogen
-    receipt = videogen.start(prompt)
-    return {"status": "pending", "operation": receipt["operation"], "prompt": prompt}
+SCOPE = {"app_name": config.APP, "user_id": config.USER}
+TOPICS = {
+    "CREATOR_TASTE": "Which video directions this creator picks and passes on, "
+                     "and how that preference changes over time.",
+    "CHANNEL_RULES": "Standing instructions the creator states for every video "
+                     "(style, subjects to avoid, format rules).",
+}
 ```
 
-`videogen.start` in `agent/videogen.py` turns the whole script into one prompt and calls Veo's `generate_videos`, which returns a long-running operation in about two seconds. The receipt carries the operation's name; that string is all a later process needs to find the render again.
+The contrast matters: documents and transcripts go to RAG Engine, the next step; numbers go to BigQuery; a person's preferences go here.
 
-```python
-render_desk = Agent(
-    name="render_desk", model=config.MODEL,
-    tools=[LongRunningFunctionTool(render_submit)],
-```
+A write is one `memories.generate` call with a conversation and the scope. Memory Bank extracts facts with a Gemini model, then embeds them so it can find the existing memories they resemble; that similarity is what drives consolidation, merge or update rather than duplicate, and the call returns what it did, CREATED, UPDATED, or nothing new. A read is one `memories.retrieve` call with the scope; the same embeddings are what `similarity_search_params` searches over when you retrieve by a query instead of the whole scope. Both are in `agent/memory.py`. The bank lives on an Agent Engine resource in your project; its name is cached in `runs/memorybank.json`.
 
-`LongRunningFunctionTool` marks a tool whose return value is a receipt and whose real result arrives later. The receipt is the dict above. `pending` is a plain value in a normal tool response, stored in the session log. In the previous step, `agent/render.py` sent the three shot prompts to this desk in one turn, so the desk's session holds three receipts. A Veo operation runs for each one, outside the agent's process.
-
-The thumbnail approval uses the same construct with a person answering. `thumb_desk` in the same file wraps `request_thumb_approval`, which returns `{"status": "pending", "kind": "thumb", ...}`. The card you will see in Vibe Studio is that pending call.
-
-**Resuming a call.** A pending call is closed by a `function_response` with the same call id. `answer()` in `agent/drive.py` builds it:
-
-<!-- code: RESUME -->
-```python
-    part = gtypes.Part(function_response=gtypes.FunctionResponse(
-        id=call_id, name=name, response=response))
-    return await _drive(node, session_id, [part], user_id)
-```
-
-The function builds a `Part` containing a `FunctionResponse` with the original `id` and sends it into the session as a new message. The Approve button, the finish worker, and adk web's response box all use this path. Ten lines above it, `Runner(app_name=…, session_service=svc(), auto_create_session=True)` drives the agent and `svc()` returns the `DatabaseSessionService` that stores the session.
-
-**Finding open calls.** The event that carries a long-running call also carries `long_running_tool_ids`. `pending()` in the same file scans a session's events, collects those ids, keeps the latest response per id, and returns the ones still marked `pending`. The finish worker and the Studio UI use it to find work.
-
-### The join condition
-
-`try_finish()` in `agent/joinlogic.py` defines "done" in two lines:
-
-<!-- code: JOIN_CONDITION -->
-```python
-    still = drive.run(drive.pending(desk_sid(st)))
-    human_ok = any(a["kind"] == "thumb" for a in st["lineage"]["approvals"])
-```
-
-The run is finished when the render call is no longer pending and the thumbnail approval is recorded. The machine result and the human answer arrive in either order. ADK delivers each by id; this function counts them.
-
-### Approve the thumbnail
-
-In Vibe Studio (the port 4600 preview), the card reads **Ship this thumbnail?**. The image was generated from your direction by `world/thumbstudio.py`, with the direction's hook printed on it as a caption:
-
-![The pre-publish review: generated from your direction, judged by you](codelab-img/s2-thumb-approve.png)
-
-The card is the pending `request_thumb_approval` call. Your click is the `function_response`. Two options:
-
-- **↻ Regenerate** generates another thumbnail from the same direction and asks again.
-- **Approve ▸** records the approval and starts the finish worker.
-
-Press **Approve ▸**. The busy banner shows the worker running.
-
-### The finish worker
-
-`agent/finish.py` runs this loop:
-
-```python
-    while time.time() - t0 < budget:
-        for cid, name, resp in drive.run(drive.pending(sid)):
-            status = videogen.check(resp["operation"])
-            if not status["done"]:
-                continue
-            if "error" in status:
-                joinlogic.handle_failed(cid, name, resp, status)
-            else:
-                joinlogic.handle_done(cid, name, resp, status)
-        if joinlogic.try_finish() is not None:
-            return
-```
-
-Each round: ask Veo about the pending operation, deliver a finished result to its pending call by id (`handle_done` calls `answer()`), resubmit a render Veo rejected (`handle_failed`, up to `STUDIO_VIDEO_RETRIES` times), then call `try_finish()`. In production this loop is a queue worker, a webhook handler, or a scheduled reconciler. In this app it runs when you approve, because no further human input is needed after that point.
-
-The card changes to **On the wall.** after the Veo clip finishes, typically a minute or three:
-
-![Vibe Studio, the Now tab: On the wall, your video is published](codelab-img/s2c-published-v2.png)
-
-The card shows a link to your channel and an idea box for the next run. The idea box is already filled in. The Session state step explains why.
-
-If Setup joined a room, the card also shows **"and the room can see you"** with a watch link. The same approval posted the video to the room's VibeTube. Follow the link to see your card in the room's grid:
-
-![Your card in the room's VibeTube, next to everyone else's](codelab-img/s2d-vibetube-room.png)
-
-Without a room, the line is absent.
-
-Open the **Channel** tab. Your card shows the approved thumbnail. Press **▶** to play:
-
-![Vibe Studio, the Channel tab: your video on the wall, thumbnail first](codelab-img/s2c-channel-play.png)
-
-The video is the Veo clip, about eight seconds, saved as `app/static/renders/<operation>_<stamp>.mp4` and served by the same app.
-
-### The publish backstop
-
-Between the join and the publish, a second workflow in `agent/post.py` ran:
-
-![The publish backstop: editor, one eval, the side effect](codelab-img/shape-4-post.png)
-
-The policy gate ran inside the main graph before any spend; its route is in `runs/state.json` under `lineage.gates.policy`. The script stage ran after that gate, so `eval_gate` checks what the script introduced: title length, tags, and that every evidence citation in the lineage points at a source that exists. Only **PASS** reaches `publisher`.
-
-Concepts used in this step:
-
-- `LongRunningFunctionTool` and the `pending` receipt
-- `function_response` with the original call id as the resume path
-- Scanning `long_running_tool_ids` to find open calls
-- A driver-owned join condition
-- A separate workflow for the side effect
-
-### Reference (optional)
-
-![What long-running means: five moments, one surviving row](codelab-img/d3-longrunning.png)
-
-One wait over time: (1) the desk submits, (2) the pending receipt is written to `sessions.db`, (3) the turn ends with no process running, (4) the server stops and the row is unchanged, (5) a process delivers the result with the same call id and the session continues.
-
-<aside class="negative">
-<b>Text does not close a pending call.</b> A text message to the desk is a new user turn. The model can reply to it, but the pending <code>function_call</code> stays open until a <code>function_response</code> with its id arrives.
-</aside>
-
-<aside class="positive">
-<b>The delivery process.</b> Every long-running system has a component that connects results to waiting calls: a queue worker, a webhook handler, a scheduled reconciler. ADK provides the primitives (pending calls in a session, <code>function_response</code> to resume). The connecting process is application code. Here it is <code>agent/finish.py</code>; in production it is a Cloud Run job or a webhook target.
-</aside>
-
-<aside class="negative">
-<b>Why the workflow holds no machine waits.</b> A resumed graph re-runs its nodes. An external submission inside a node would be submitted, and paid for, twice. Machine waits live in the desk's plain session; the graph pauses only for people.
-</aside>
-
-<aside class="positive">
-<b>Why <code>post</code> is a separate workflow.</b> <code>publisher</code> has a side effect, and a resumed graph re-runs its nodes. The main graph ends at the script, the renders and your approval happen outside it, and <code>wf_post</code> runs once afterward with its own <code>Runner</code> and session id (<code>&lt;run_id&gt;_post</code>).
-</aside>
-
-<aside class="positive">
-<b>Retries.</b> Every Veo call in <code>agent/videogen.py</code> retries: the submission, the status check, and the download, each up to <code>STUDIO_VIDEO_RETRIES</code> times (default 3), <code>STUDIO_VIDEO_INTERVAL</code> seconds apart (default 15). A render Veo rejects or filters is resubmitted through the same desk call, up to the same count. A render that never finishes inside <code>STUDIO_VIDEO_TIMEOUT</code> seconds (default 600) is recorded as failed with the reason, and the lap publishes with a text manifest in place of the video. Nothing is left pending.
-</aside>
-
-<aside class="positive">
-<b>Idempotent publish.</b> The publish POST carries an <code>Idempotency-Key</code>. A replay returns the original video id instead of creating a duplicate. The <code>lap</code> check re-sends the POST and asserts the same id.
-</aside>
-
-<aside class="positive">
-<b>The room post.</b> After the wall publish succeeds, <code>joinlogic.try_finish</code> calls <code>premiere.publish_to_room()</code>: one multipart POST with title, description, your display name, the video, and the thumbnail to <code>POST /api/events/&lt;room&gt;/videos</code>. Re-running the same lap replaces your entry (same <code>projectId</code>). A <code>200</code> means accepted, not playable; the platform transcodes in the background, so the card may read "processing" for a minute or two. Read it with <code>cloudshell edit ~/vibe-studio-lab/agent/premiere.py</code>.
-</aside>
-
-<aside class="negative">
-<b>Room failures.</b> A room failure does not fail the run. The card shows <code>room: skipped (…)</code> with the platform's reason. <code>403</code>: the upload window is closed. <code>413</code>: over the limits (50 MB video, 5 MB images). <code>404</code>: wrong room code. Fix <code>.env</code> or wait for the window, then re-post with <code>python -m agent.premiere</code> in tab 1.
-</aside>
-
-**Running the worker from the terminal.** On a later run, when the thumbnail card appears, run this in **tab 1** instead of pressing Approve:
+In **tab 1**, create the bank, then load the creator's history:
 
 ```console
 cd ~/vibe-studio-lab
 source .venv/bin/activate
-python -m agent.finish
+python -m agent.bank
+python -m agent.bank load
+python -m agent.bank list
 ```
 
-It auto-approves the thumbnail and prints the delivery. The `render failed` line appears only when Veo rejects a render:
+The first command creates the Agent Engine that hosts the bank, once; run again, it connects. The second seeds four past sessions, oldest first: two picks of animals with one stated rule, one of gadgets, one of fantasy, each as a generate call, and prints what consolidation kept. Memory Bank extracts the facts with a Gemini model, embeds them so it can find the memories they resemble, and consolidates. The third lists the bank. Compare the list with the four sessions in `agent/bank.py`: the sessions were prose, the memories are facts.
 
-```
-── human approval: thumbnail — AUTO-APPROVED [workshop mode] ──
-── render failed: the model returned no video (filtered or empty) (attempt 1/3) ──
-  desk: 'WAITING'
-── result delivered: projects/…/operations/… ──
-── join complete (render done + human) -> post-production ──
-PUBLISHED: {'published': True, 'video_id': 'v_…', 'url': '/watch/v_…'}
-```
+### Part b: callbacks
 
-**Raw events in adk web.** Open the port 8000 preview and change `userId=user` to `userId=creator` in the URL (adk web files your chats under user `user`; the run's sessions belong to `creator`). Select the `vibestudio` app, click **NEW SESSION ▾**, and open the newest `run_…_wf` session. From top to bottom: the three candidates in state, the `adk_request_input` with the pick schema, your pick as a `function_response`, `user:prefs` and `direction` in state, the policy route, and the script.
+A callback is a plain function passed as an argument to `Agent`. ADK runs it at a fixed point in the agent's turn with the objects in play at that point, and reads its return value: `None` means continue as normal, anything else replaces what would have happened next. There are six, in three pairs:
 
-![One run in raw events: candidates, the pause, your pick, the route](codelab-img/s2-adkweb-wf.png)
+| Pair | When | What it sees | Return value |
+|---|---|---|---|
+| `before_agent_callback` / `after_agent_callback` | Around the whole turn | `CallbackContext`: state, the session, the invocation | `Content` replaces the agent's reply; `None` keeps it |
+| `before_model_callback` / `after_model_callback` | Around each model call | The `LlmRequest` about to go out, or the `LlmResponse` that came back | An `LlmResponse` skips or replaces the model's answer; `None` proceeds |
+| `before_tool_callback` / `after_tool_callback` | Around each tool call | The tool, its arguments, its result | A dict replaces the tool's result; `None` proceeds |
 
-The newest `run_…_desk` session shows one `render_submit` call, the WAITING reply, and the delivered url closing the call by id.
+That makes callbacks the place for guardrails, logging, caching, and, as here, giving an agent context it did not ask for. Two of them carry memory:
 
-![The desk: the pending call, then its result by id](codelab-img/s2-adkweb-desk.png)
+- `before_model_callback` on `propose_directions`, right before its model call, with the request about to be sent.
+- `after_agent_callback` on `scripter`, once its turn is over, with the session state in hand.
 
-<aside class="positive">
-<b>Optional check.</b> In tab 1: <code>python -m checks.check lap</code>. It asserts that the graph ran, the human pauses were answered by id, the render result was delivered, and publish passed the gates and is idempotent.
-</aside>
+`recall_taste` in `agent/memory.py` retrieves the creator's memories, oldest first, appends them to the model request with one instruction, lean candidates 1 to 3 toward the most recent taste and treat the rules as constraints, and stores what it read in state. `remember_pick` reads the direction `persist_direction` wrote to state, composes one sentence about tonight's pick, and hands it to `remember`. Both return `None`.
 
-## The audience graph in BigQuery
-Duration: 0:06:00
+This step's app is `stage4_memory`, the step 5 graph with the two callbacks left off. Add them (in Vibe Studio, step 6b):
 
-![BigQuery graph context: four node tables, three edges](codelab-img/d8-graph.png)
-
-The four cards are BigQuery tables. The three arrows are edges declared over them: creators publish videos, videos are about topics, viewers watch videos. The `watched` edge carries the retention columns `watched_ms` and `drop_ms`. The channel's questions are paths across this graph: one hop for "where do viewers drop off", three hops for "what else do my finishers finish".
-
-In this step you build the audience's watch data as a BigQuery property graph, then connect the `read_graph` node to the workflow with one edge. From that run on, candidates cite graph readings by name.
-
-- **Store:** a BigQuery dataset, `vibestudio`, in your project.
-- **Why this store:** watch data is shared with other tools and outlives this VM.
-- **Setup:** one button in the app's **World** tab runs `scripts/graph.sh`, which creates the dataset, loads the vendor pack, declares the graph, and inserts your rows. Then one edge in `agent/graph.py` connects `read_graph` to the fan-out.
-- **Use:** `read_graph` queries the graph on every run.
-
-### Why BigQuery, and whether a graph is needed
-
-Watch rows are the platform's data, not the agent's. They are shared across tools and persist after `state.json` is deleted. The wall's SQLite database stands in for that platform data in this lab.
-
-`taste_graph` is a declaration over existing tables. No data is copied and no new system is deployed. Two questions decide whether the declaration is useful:
-
-| Question | In this lab |
-|---|---|
-| How many hops is the question? | "Where do viewers drop off" is one hop and runs as SQL; the report tags it `engine: sql`. "What else do my finishers finish" is three hops (me → video ← viewer → video → topic) and runs as one `MATCH`. |
-| Does the relationship carry data? | `watched_ms` and `drop_ms` belong to the watch, not to the viewer or the video. |
-
-A many-to-many relationship alone does not need a graph. Multi-hop questions over many-to-many edges do.
-
-### The edge declaration
-
-`GRAPH_DDL` in `bqgraph/load.py` declares the four tables as nodes, then the `watched` edge:
-
-<!-- code: EDGE_TABLE -->
-```sql
-    `{d}.watched` AS watched
-      KEY (viewer_id, video_id)
-      SOURCE KEY (viewer_id) REFERENCES viewers (id)
-      DESTINATION KEY (video_id) REFERENCES videos (id)
-```
-
-| Clause | Meaning |
-|---|---|
-| `KEY` | The columns that identify one edge row |
-| `SOURCE KEY … REFERENCES` | The node the edge starts from |
-| `DESTINATION KEY … REFERENCES` | The node the edge ends at |
-
-The table's other columns (`watched_ms`, `drop_ms`, `completed`) become edge properties. `published` and `about` are declared the same way.
-
-### Build the graph
-
-In Vibe Studio, open the **World** tab:
-
-![The World tab before anything is loaded](codelab-img/s4-world-empty.png)
-
-Press **Build + read the graph ▸**. The caption names the command: `bash scripts/graph.sh`. The script runs three steps: **CONNECT + LOAD** (dataset, vendor pack, DDL), **STORE** (your rows), **READ** (the queries). Output streams into the page for about 40 seconds:
-
-![The graph being built: step 1 complete, output arriving live](codelab-img/s4-world-running.png)
-
-A dot turns solid when the script prints that step's banner. The app runs the script and tails its log; it does not call BigQuery itself.
-
-The three readings appear when the third step finishes:
-
-![The three readings, from your project](codelab-img/s4-world-done.png)
-
-The `engine` chip on each reading shows how it ran: `graph#1` as **sql** (one hop), `graph#2` and `graph#3` as **gql** (two and three hops). The median drop just before 5 seconds becomes a rule in the Memory Bank step.
-
-### View it in the console
-
-Open [console.cloud.google.com/bigquery](https://console.cloud.google.com/bigquery) and select your project. In the Explorer, expand the project, then the `vibestudio` dataset. **Tables** lists the six tables with row counts. **Graphs → taste_graph** shows the declared graph:
-
-![Your edges drawn: 4 nodes, 3 edges in the console's graph editor](codelab-img/s4-console-graph.png)
-
-### Connect read_graph (the GRAPH_EDGE hole)
-
-`read_graph` is a node in `agent/graph.py` with no incoming edge. In **tab 1**, open the file:
-
-```console
-cloudshell edit ~/vibe-studio-lab/agent/graph.py
-```
-
-In the edge list, find the line marked `TODO: GRAPH_EDGE`. Delete it and uncomment the line below it:
-
-<!-- code: GRAPH_EDGE -->
+<!-- code: MEMORY_RECALL -->
 ```python
-        (START, read_graph, join_research),
+    output_schema=Directions,
+    before_model_callback=recall_taste)
 ```
 
-![Before and after in the editor: the TODO line goes, the edge line loses its #](codelab-img/s4-edit-before-after.png)
+<!-- code: MEMORY_REMEMBER -->
+```python
+    output_schema=Script,
+    after_agent_callback=remember_pick)
+```
 
-The join waits for every connected feed and passes on whatever arrives, so no other line changes.
-
-Reload Vibe Studio. When the next run starts, the map shows the new node:
-
-![The map after the edit: read_graph (circled) joins the fan-out the moment the edge exists](codelab-img/s4-map-grown.png)
-
-### Run the second video
-
-1. Open the **Now** tab.
-2. Press **Start next lap ▸** (keep the pre-filled idea or type another) and wait about 20 seconds. Three research nodes light together.
-3. The direction card's candidates carry evidence chips: `trends`, and `graph#N` once your watch rows are in the graph:
-
-![The candidates now carry evidence chips: readings the agent may cite by name](codelab-img/s4-evidence-graph.png)
-
-   Which chip a given run cites varies. `read_graph` now runs on every lap, and its readings are available to cite. The World tab shows the readings themselves.
-4. Pick a direction, press **Continue ▸**, and press **Approve ▸** when the thumbnail card appears. The next two steps use this run: the Session state step reads what it left behind, and the Memory Bank step distills its audience data.
+In adk web, switch to **`stage4_memory`** and send an empty message, so the proposer works from the backlog, the trends, and the memory alone. Open the `propose_directions` event: the request carries a MEMORY block with the three eras, and candidates 1 to 3 lean toward fantasy, the most recent taste, while the trends say something else. Pick one. After the scripter runs, `python -m agent.bank list` shows one memory changed or added: what you picked tonight. Run again with an idea of your own and watch the lean follow it.
 
 Concepts used in this step:
 
-- A property graph declared over existing BigQuery tables
-- Edge properties for relationship data
-- GQL `MATCH` for multi-hop queries, SQL for one hop
-- Adding a node to a running workflow with one edge
+- Memory Bank: scope, extraction, consolidation, custom memory topics
+- `memories.generate` and `memories.retrieve`
+- `before_model_callback` and `after_agent_callback` on an `Agent`
+- Memory as a concern of two agents, not a node in the graph
 
-### Reference (optional)
-
-<aside class="positive">
-<b>From the terminal.</b> <code>bash scripts/graph.sh</code> in tab 1 prints the same three banners. The three steps are <code>python -m bqgraph.load</code>, <code>bqgraph.export</code>, and <code>bqgraph.report</code>. <code>report</code> writes <code>runs/graph_report.json</code>, which the World tab renders.
-</aside>
-
-<aside class="positive">
-<b>Optional DDL clauses.</b> An edge can also declare <code>LABEL x PROPERTIES (a, b, c)</code>. Without <code>PROPERTIES</code>, every column is a property (which is why <code>w.completed</code> works in the queries). Without <code>LABEL</code>, the alias is the label.
-</aside>
-
-<aside class="positive">
-<b>Authentication.</b> <code>_bq()</code> in <code>bqgraph/queries.py</code> is <code>bigquery.Client()</code> with no arguments. Cloud Shell supplies Application Default Credentials. On a laptop, run <code>gcloud auth application-default login</code>. In CI, use workload identity. No service account key file is used.
-</aside>
-
-<aside class="positive">
-<b>GQL and SQL.</b> Each path query in <code>bqgraph/queries.py</code> exists as a GQL <code>MATCH</code> and as an equivalent SQL join. The <code>engine:</code> tag in the report records which ran.
-</aside>
-
-<aside class="positive">
-<b>Privacy floor.</b> Queries return only cohorts of at least <code>K_ANON</code> viewers (2 in this dataset; a production platform uses about 10 or more) and never return viewer ids.
-</aside>
-
-<aside class="negative">
-<b>The TODO guard.</b> The shipped starter has every DDL edge in place. If an edge is carved out in authoring mode, stages 1 and 3 raise <code>NotImplementedError: TODO: EDGE_TABLE</code> instead of creating a graph with missing edges.
-</aside>
-
-<aside class="positive">
-<b>Optional check.</b> In tab 1: <code>python -m checks.check graph</code>. It asserts that <code>taste_graph</code> exists in your project, your rows are in it, and a path query about your videos returns rows.
-</aside>
-
-## Session state and the user: prefix
-Duration: 0:07:00
-
-![Where state lives while the agent waits: every write and read of one run](codelab-img/d4-state.png)
-
-The left column is one run. The right column is the five storage layers. Solid arrows are writes: events and preferences into `sessions.db`, the ledger into `state.json`, rows into BigQuery, notes into Memory Bank. Dashed arrows are reads, and each one feeds the next run.
-
-Two videos are published. This step shows where their state lives, and how the app read a preference from the first run before the second one started.
-
-Two facts drive this step. ADK session state persists in the SessionService, here a `DatabaseSessionService` backed by `runs/sessions.db`. A key with the `user:` prefix is scoped to the user across all of that user's sessions, not to one session. `persist_direction` writes such a key, `user:prefs`, on every run.
-
-### The storage layers
-
-| Lifetime | Written by | Location |
-|---|---|---|
-| One turn | The model | RAM of one call; discarded at turn end |
-| Across restarts | ADK, on every event | `runs/sessions.db`: events, `session.state`, `user:` keys, every pending call |
-| One run | Your driver | `runs/state.json` |
-| The channel | The platform | The `vibestudio` dataset in BigQuery |
-| The channel's lessons | `learn` | A Memory Bank resource: `projects/…/reasoningEngines/<id>` |
-
-Studio's **State** tab shows this table with live values:
-
-![The ladder, live: five lifetimes and what each is holding right now](codelab-img/s3-state.png)
-
-### Restart the server
-
-In **tab 3**, the terminal running `scripts/start.sh`, press **Ctrl+C**. The server stops. The Vibe Studio tab fails to load on its next refresh.
-
-In the same tab, list the state directory:
-
-```console
-ls runs
-```
-
-```
-graph_report.json  graph_run.log  sessions.db  state.json  ui_busy.json  wall.db
-```
-
-These files hold every wait, event, and key from the runs, plus the BigQuery readings from the previous step. The Memory Bank step adds `memorybank.json`, and a room adds `premiere_….mp4`.
-
-Start the server again:
-
-```console
-scripts/start.sh
-```
-
-Reload the browser and open the **State** tab. Each row shows the same values as before the restart. The three render receipts and the thumbnail approval are rows in `sessions.db`. The run's brief and script are keys in `state.json`. The wall's rows are in `wall.db`. `memorybank.json`, once created, holds the resource name of the bank. The BigQuery dataset and the Memory Bank resource are not in this directory; they persist independently of this machine.
-
-### How state is written and read
-
-A node writes state by yielding `Event(state={…})`. The delta is appended to the event log, which is why it replays and survives a restart. Any code with the session reads `session.state`; both State tabs read it. The SessionService stores it. Replacing `DatabaseSessionService` with `VertexAiSessionService` moves the same events, state, and pending calls into managed Agent Engine sessions without changing agent code.
-
-### The user: prefix
-
-`persist_direction` in `agent/graph.py` writes five keys when you pick a direction:
-
-```
-    yield Event(state={"direction": chosen["title"], "angle": chosen.get("angle", ""),
-                       "hook": hook, "constraints": constraints or "(none yet)",
-                       "user:prefs": {"last_direction": chosen["title"],
-                                      "idea": state.load().get("hint", "")}})
-```
-
-Four keys are session-scoped and end with the run. `user:prefs` is user-scoped and is visible from every session that user owns. `temp:` keys are never persisted.
-
-### Reading the preference before a run exists
-
-Open the **Now** tab. The published card from your second video shows an idea box next to **Start next lap ▸**, already filled with a topic derived from the direction you picked. The same box was already filled before the second run, from the first run's preference:
-
-![The published card: the idea box is pre-filled from user:prefs with your last direction](codelab-img/s3-suggest-chip.png)
-
-The app filled it from `user:prefs` in the SessionService, read by `server/services/run_state.py`:
-
-```python
-    prefs = drive.run(drive.ensure_user_state("_ui_probe")).get("user:prefs") or {}
-    return prefs.get("last_direction", "")
-```
-
-The session id is `_ui_probe`, a session unrelated to any run. A `user:` key belongs to the user, so a new session for that user can read it. Restarting the app does not clear the box.
-
-Do not press the button yet. The Memory Bank step starts the third video.
-
-![Start next lap: the next step starts from this button, idea box already filled](codelab-img/s3-nextlap-click.png)
-
-To view the same key in adk web:
-
-1. Open **Web Preview → Change port → 8000**.
-2. In the address bar, change `userId=user` to `userId=creator` and press Enter. Your own chats are under user `user`; the app's runs are under user `creator`.
-
-<aside class="negative">
-<b>Replace the value; do not append a second parameter.</b> The URL already contains <code>userId=user</code>. Adding <code>&amp;userId=creator</code> produces <code>No sessions found for user 'user,creator'</code>.
-</aside>
-
-![Step 2: one word changes, userId=user becomes userId=creator](codelab-img/s3-userid-bar.png)
-
-3. Click the **NEW SESSION ▾** picker.
-4. Click the newest `run_…_wf` session:
-
-![Step 4: the picker lists the app's sessions once userId=creator is in the URL](codelab-img/s3-devui-picker.png)
-
-5. Click the **State** tab. `user:prefs` appears beside the session-scoped keys:
-
-![One store, two lifetimes: user:prefs beside the run's plain keys](codelab-img/s3-adkweb-state.png)
-
-Concepts used in this step:
-
-- `DatabaseSessionService` and `runs/sessions.db`
-- `Event(state=...)` deltas on the event log
-- The `user:`, `temp:`, and `app:` key prefixes
-
-### Reference (optional)
-
-<aside class="positive">
-<b>Write path.</b> A node yields <code>Event(state={"user:prefs": …})</code>. The delta is committed to the event log in <code>sessions.db</code>. The SessionService folds it into <code>session.state</code>. Later sessions for the same user see the <code>user:</code> keys.
-</aside>
-
-<aside class="positive">
-<b>Production session store.</b> <code>svc()</code> in <code>agent/drive.py</code> is one line: <code>DatabaseSessionService(db_url=…)</code>. Replace it with <code>VertexAiSessionService</code>, and point adk web's <code>--session_service_uri</code> at your Agent Engine, to store the same events, deltas, and pending calls in managed sessions.
-</aside>
-
-<aside class="negative">
-<b>The other prefixes.</b> <code>temp:</code> keys are never persisted. <code>app:</code> keys are shared across all users of the app. The check below catches a <code>temp:</code> key that leaked into the store.
-</aside>
-
-<aside class="positive">
-<b>Optional check.</b> In tab 1: <code>python -m checks.check state</code>. It asserts that <code>user:prefs</code> is readable from a new session, matches the direction you picked, and that no <code>temp:</code> key was persisted.
-</aside>
-
-## Memory Bank: connect, write, read
+## The audience's feedback in RAG Engine
 Duration: 0:10:00
 
-![Memory Bank: the write and the read](codelab-img/d9-memory.png)
+The channel has viewers, and they leave comments. Thirty of them sit in one markdown file, `agent/comments.md`: praise for the cat and the sock-drawer dragon, complaints about a gadget video that felt like an ad, captions that covered the cat's face, an intro five seconds too long. In this step that file becomes a GEAP RAG Engine corpus, and the workflow asks it what viewers said about tonight's idea before the proposer pitches. Memory Bank held what the creator prefers; the corpus holds what the audience wrote.
 
-The bank sits in the middle with its scope and three topics. The left lane is the write: readings are distilled into sentences, and one `generate` call stores them; consolidation merges each new note with existing ones (CREATED or UPDATED). The right lane is the read: `read_memory` retrieves notes by similarity to a question, before any decision in the run.
+### Part a: RAG Engine
 
-In this step you create a Memory Bank, write notes from the previous run's audience data, and connect `read_memory` to the workflow with one edge. The third video then follows a rule derived from the audience.
+RAG Engine is retrieval over documents. You upload files to a corpus; it splits them into passages, turns each passage into a vector with an embedding model, and stores the vectors. A question is embedded with the same model, and the passages whose vectors sit nearest come back. Nearby vectors mean similar meaning, so a comment about "the tiny dragon guarding one sock" answers a question about "small magic in the kitchen" without sharing a word with it. That is the whole mechanism: meaning in, meaning out.
 
-- **Store:** a managed Memory Bank on an Agent Engine resource in your project.
-- **Why this store:** notes must outlive runs, sessions, and this machine, and consolidation is a service.
-- **Setup:** one command creates the resource and caches its name in `runs/memorybank.json`.
-- **Use:** `learn` writes notes; `read_memory` retrieves them on every run.
-
-### Connect: create the bank
-
-`agent/memory.py` has two relevant parts:
-
-- `_bank_config()` builds the configuration: `AgentEngineConfig → context_spec → memory_bank_config → memory_topics`. An Agent Engine with this block hosts a Memory Bank, and `memory_topics` define what a note may be about.
-- `engine_name(create=True)` calls `agent_engines.create(config=…)` once and caches the returned resource name in `runs/memorybank.json`. Every read and write addresses that name.
-
-<aside class="positive">
-<b>Topics.</b> This lab defines three custom topics, <code>CHANNEL_LESSONS</code>, <code>CHANNEL_CONSTRAINTS</code>, and <code>AUDIENCE</code>, each with a one-line description that consolidation reads. They match the <code>[TOPIC]</code> prefixes the learner writes. Google also provides managed topics: <code>USER_PREFERENCES</code>, <code>USER_PERSONAL_INFO</code>, <code>KEY_CONVERSATION_DETAILS</code>, and <code>EXPLICIT_INSTRUCTIONS</code>.
-</aside>
-
-In Vibe Studio, open the **State** tab. The **Memory** row has a **Connect the bank ▸** button; its caption names the command, `python -m agent.bank`:
-
-![The State tab: the Memory row's one-time Connect button](codelab-img/s5-connect-button.png)
-
-Press it. After about 30 seconds the row shows the resource name and the command output. The button disappears because `runs/memorybank.json` now exists:
-
-```
-── created ──
-  projects/…/locations/us-central1/reasoningEngines/3403957707466604544
-scope for every note: app_name=vibestudio · user_id=creator
-memory topics (custom): CHANNEL_LESSONS · CHANNEL_CONSTRAINTS · AUDIENCE
-the bank holds 0 note(s)
-```
-
-![Connected: the resource name under the Memory row](codelab-img/s5-connected.png)
-
-In the Cloud console, open [console.cloud.google.com/vertex-ai/agents/agent-engines](https://console.cloud.google.com/vertex-ai/agents/agent-engines), select your project, open the engine, and click its **Memory Bank** tab:
-
-![The bank in the console: a managed resource in your project](codelab-img/s5-console-memorybank.png)
-
-### Write: distill readings into notes
-
-| | BigQuery graph | Memory Bank |
-|---|---|---|
-| Holds | Raw rows | Distilled sentences |
-| Retrieved by | A query you write | Similarity to a question |
-| Delivered to | A report | The agent's context during a run |
-
-`distill()` in `agent/learn.py` converts the drop-at-5s reading into a conclusion-first rule and the neighbor overlap into one audience sentence. Notes contain no video ids, row counts, or job ids.
-
-`write_facts()` in `agent/memory.py` writes them:
-
-<!-- code: GENERATE -->
-```python
-    op = _cli().agent_engines.memories.generate(
-        name=name,
-        direct_memories_source=vt.GenerateMemoriesRequestDirectMemoriesSource(
-            direct_memories=[{"fact": f} for f in facts]),
-        scope=SCOPE, config={"wait_for_completion": True})
-```
-
-`direct_memories_source` supplies facts rather than a transcript. `scope` is this app and this user. `wait_for_completion` blocks until consolidation finishes, so the response includes a CREATED or UPDATED flag per memory. `name` is the resource created above.
-
-To write the notes:
-
-1. Open the **Now** tab. The card for the run you finished in the BigQuery step, still on screen, now has a **Learn from the audience ▸** button. The app shows it only when `runs/memorybank.json` exists.
-
-![Step 1: the published card, now with the Learn button the bank unlocked](codelab-img/s2c-published.png)
-
-2. Press it. The caption names the command, `python -m agent.learn`. Its `main()` runs three functions you have read:
+The corpus is created with its embedding model, `text-embedding-005`, and the file is uploaded with a chunking config, about 120 tokens per passage, so a passage is two or three comments:
 
 ```python
-    from bqgraph import export as bq_export
-    bq_export.main()          # re-align rows (the graph chapter's stage 2/3)
+corpus = rag.create_corpus(
+    display_name="vibestudio-feedback",
+    description="Vibe Studio: what the audience wrote under the channel's past videos.",
+    backend_config=rag.RagVectorDbConfig(
+        rag_embedding_model_config=rag.RagEmbeddingModelConfig(
+            vertex_prediction_endpoint=rag.VertexPredictionEndpoint(
+                publisher_model="publishers/google/models/text-embedding-005"))))
 
-    facts = distill()         # readings -> notes (the code above)
-    ...
-    flags = memory.write_facts(facts)   # the generate call you just read
+rag.upload_file(
+    corpus_name=corpus.name, path="agent/comments.md", display_name="comments.md",
+    transformation_config=rag.TransformationConfig(
+        chunking_config=rag.ChunkingConfig(chunk_size=120, chunk_overlap=20)))
 ```
 
-3. After about 30 seconds, open the **State** tab. The Memory Bank row lists the notes:
+A query is one `retrieval_query` call with the corpus and the text. It returns the `top_k` passages, each with a score: the distance between the question's vector and the passage's, lower is closer. `retrieve` in `agent/rag.py` wraps it and returns rows of text, score, and source. The corpus is a RAG Engine resource in your project; its name is cached in `runs/ragcorpus.json`.
 
-![Step 3: the bottom rung is no longer empty](codelab-img/s5-state-notes.png)
+In **tab 1**, create the corpus, load the comments, then ask it something:
 
-### Read: connect read_memory (the MEMORY_EDGE hole)
+```console
+cd ~/vibe-studio-lab
+source .venv/bin/activate
+python -m agent.rag
+python -m agent.rag load
+python -m agent.rag query "small magic in the kitchen"
+```
 
-The bank has notes, but `read_memory` in `agent/graph.py` has no incoming edge, so no run reads them. Open the file (`cloudshell edit ~/vibe-studio-lab/agent/graph.py` in **tab 1** if it is closed). Find the line marked `TODO: MEMORY_EDGE`. Delete it and uncomment the line below it:
+The first command creates the corpus, once; run again, it connects. Before creating it, the command sets the project's RAG managed database to serverless mode, because a fresh project defaults to a provisioned mode that some regions cannot allocate. The second uploads `agent/comments.md` and waits, about two minutes, until a probe query returns passages; run it again after editing the comments and the previous copy is replaced, not doubled. The third prints the five passages nearest to the question. Read them: the dragon comments come back for a question that never says dragon. Try a question of your own that shares no word with the comment you expect.
 
-<!-- code: MEMORY_EDGE -->
+### Part b: the third reader
+
+Memory was context for one agent, so it rode a callback on that agent. Feedback is research, like the trends and the backlog: a fetch that produces data before the proposer runs, so it belongs in the research fan-out as one more function node. `read_feedback` in `agent/graph.py` has the same shape as the other two readers:
+
 ```python
-        (START, read_memory, join_research),
+def read_feedback(node_input):
+    """The third reader (step 7): what the audience wrote under past videos,
+    the passages nearest to tonight's idea. Retrieval, not a model call."""
+    from . import rag
+    idea = idea_text(node_input)
+    query = idea or "what viewers liked and what they complained about"
+    try:
+        hits = rag.retrieve(query)
+    except Exception as e:
+        print(f"  [rag] feedback unavailable ({str(e)[:80]})")
+        return Event(output={"query": query, "feedback": [],
+                             "note": "no corpus connected - run: python -m agent.rag"})
+    return Event(output={"query": query, "feedback": [h["text"] for h in hits]})
 ```
 
-The graph now has the four readers shown in the pipeline diagram. `read_memory` retrieves notes and also writes the retrieved `CHANNEL_CONSTRAINTS` rule into state as `constraints`, where the scripter's prompt reads it.
+The question is tonight's idea, the message that started the run; with no idea, it asks what viewers liked and what they complained about. `join_research` waits for every edge that enters it, so one more edge makes it wait for three readers, and the bundle it hands on has a third key, `read_feedback`. The proposer's instruction names that key: let the feedback steer candidates 1 to 3, lean into what viewers praised, avoid what they complained about, and cite `feedback` in the evidence.
 
-### Run the third video
+This step's app is `stage5_rag`, the step 6 graph with its callbacks. Add the edge (in Vibe Studio, step 7b):
 
-1. Open the **Now** tab and press **Start next lap ▸**. After about 20 seconds, four research nodes light together.
-2. Read the direction card. The candidates state the outcome up front, because the retrieved `CHANNEL_CONSTRAINTS` note says conclusion-first. The evidence chips include both `graph#` and `memory#`:
+<!-- code: RAG_NODE -->
+```python
+           (START, read_backlog, join_research),
+           (START, read_feedback, join_research),
+```
 
-![The loop closed: memory# beside graph# on the candidates](codelab-img/s5-cited-chips.png)
-
-To see the retrieval in adk web:
-
-1. Open **Web Preview → Change port → 8000**.
-2. If the URL contains `userId=user`, change it to `userId=creator` and press Enter.
-3. Click **NEW SESSION ▾**.
-4. Click the newest `run_…_wf` session.
-5. Scroll to the top of the event list and find the `State: constraints` chip among the research events:
-
-![The research fan-out, raw: read_memory writing the recalled constraint into state](codelab-img/s5-recalled-prompt.png)
-
-That chip is `read_memory` writing the retrieved note into state, alongside the other research nodes and before `propose_directions` runs.
-
-Finish the video: pick a direction, press **Continue ▸**, and press **Approve ▸** when the thumbnail card appears.
-
-### Three videos
-
-Open the **Channel** tab:
-
-![Three runs side by side: one channel, each video better than the last](codelab-img/s5-channel-3.png)
-
-The first video used your typed idea. The second started from a pre-filled idea and cited graph readings. The third opened on the conclusion the audience data indicated. The edge list changed by two lines between the first and the third. If Setup joined a room, all three are on the room's VibeTube:
-
-![The room's VibeTube: three posts from three runs](codelab-img/s5-room-3.png)
+In adk web, switch to **`stage5_rag`** and send an idea close to something viewers commented on, for example `tiny dragons in the kitchen`. Open the `read_feedback` event: the query is your idea and the output holds the five nearest passages. Open `join_research`: the bundle has a third key. Open `propose_directions`: candidates 1 to 3 lean toward what viewers praised and away from what they complained about, and their evidence cites `feedback`. The proposer is a model, so the result varies: the same idea gives different titles on different runs, and a run may cite the feedback in one candidate or in three. Compare the lean, not the wording. Pick one and let the run finish, then run the same idea again: the passages are identical, the candidates are not. Retrieval is deterministic; the proposer is not.
 
 Concepts used in this step:
 
-- `AgentEngineConfig` with `memory_bank_config` and custom `memory_topics`
-- `memories.generate` with `direct_memories_source` and consolidation flags
-- `memories.retrieve` by similarity, inside a workflow node
-- Writing a retrieved rule into run state for a downstream agent node
+- RAG Engine: a corpus, files, passages, an embedding model, a vector store
+- `create_corpus`, `upload_file`, `retrieval_query`
+- Retrieval as a function node in the fan-out; a `JoinNode` waits for every incoming edge
+- Three research sources in one bundle, and a model that weighs them differently on every run
 
-### Reference (optional)
+## The video: a long-running tool
+Duration: 0:10:00
 
-<aside class="positive">
-<b>Connect from the terminal.</b> <code>python -m agent.bank</code> in tab 1 prints the same lines as the button. A second run prints <i>already connected</i>, because <code>runs/memorybank.json</code> exists.
-</aside>
+Generating the video with Veo takes a few minutes. Keeping the graph waiting that whole time is a poor fit: the process ties up resources, and anything that goes wrong in the meantime takes the run down with it. So this step makes the render asynchronous. One more agent node, `render_desk`, has a tool that submits the render and returns the operation id right away; the workflow pauses with that id in the session store. Later, from the console, you deliver the finished clip to that id and the graph continues. Nothing stays alive in between; the server can stop and start.
 
-<aside class="positive">
-<b>Write from the terminal.</b> <code>python -m agent.learn</code> in tab 1 prints the row alignment, the three distilled notes, and the consolidation flags: <code>CREATED memory#…</code> for a new note, <code>UPDATED</code> when the service merged the note into an existing one.
-</aside>
+### Part a: Veo, as a long-running tool
 
-<aside class="positive">
-<b>Read from the terminal.</b> <code>python -m agent.learn --recall "what should my videos do in the first seconds?"</code> calls <code>memories.retrieve</code> with a similarity query and prints the constraint and the lesson. <code>memories.list</code> returns every note unranked; the Studio State tab uses it.
-</aside>
+`agent/videogen.py` talks to Veo. `start(prompt)` calls `generate_videos` and returns at once with the operation name; `check(operation)` calls `operations.get` and returns `{"done": False}` while the clip renders, then the file's path and URL once it exists. Every Veo call retries eight times, seventy seconds apart (`STUDIO_VIDEO_RETRIES`, `STUDIO_VIDEO_INTERVAL`). With `STUDIO_REAL_VIDEO=0` in `.env`, `start` hands out a stand-in receipt that `check` reports done after five seconds, with no file: the same path through the graph, at no cost.
 
-<aside class="positive">
-<b>Naming.</b> The console calls the product Agent Platform, the SDK namespace is <code>agent_engines</code>, and the resource path contains <code>reasoningEngines</code>. All three refer to the same resource. Deploying an agent to Agent Engine (<code>adk deploy agent_engine</code>) is a separate topic; this lab uses the resource only to host memory.
-</aside>
+`render_desk` is the new agent node; its only tool is a plain function around `start`:
 
-<aside class="positive">
-<b>ADK wrapper.</b> ADK wraps this resource as <code>VertexAiMemoryBankService(project, location, agent_engine_id)</code>. Pass it to the <code>Runner</code> as <code>memory_service</code>, or to <code>adk web</code> as <code>--memory_service_uri</code>. This lab calls the SDK directly so the requests are visible.
-</aside>
+```python
+def render_submit(prompt: str) -> dict:
+    """Submit one Veo render of `prompt`. Returns at once with a pending
+    receipt; the clip is delivered later, to this call, by id."""
+    receipt = videogen.start(f"{prompt} {videogen.NO_TEXT}")
+    return {"status": "pending", "operation": receipt["operation"], "prompt": receipt["prompt"]}
+```
 
-<aside class="positive">
-<b>Corrections.</b> <code>python -m agent.learn --forget &lt;id&gt;</code> deletes a note. <code>--inject "[CHANNEL_CONSTRAINTS] …"</code> writes one by hand.
-</aside>
+As an ordinary function tool, that return value is a result like any other: the model reads the dict, answers in the same turn, and the graph moves on with nothing rendered. `LongRunningFunctionTool` changes what ADK does with it. A result whose `status` is `pending` marks the call id as long-running: the agent's turn ends there, the workflow suspends at this node, and the session holds the call, its id, and the receipt. Resuming is one message: a `function_response` with the same id and name and the final result. That answer completes the `render_desk` node and the graph continues to the next node; `render_desk` does not take another turn. Completed nodes do not run again. Once the run has paused, nothing in the workflow checks on the render. A separate process does the polling, `python -m agent.deliver` in part b; in step 9 the app runs that same loop inside its server.
 
-<aside class="positive">
-<b>Optional check.</b> In tab 1: <code>python -m checks.check channel</code>. It asserts that the notes exist and contain no ids or row counts, the run cited a memory that exists, the script followed the conclusion-first rule, and the idea box was pre-filled from <code>user:prefs</code>.
-</aside>
+This step's app is `stage6_video`, the step 7 graph plus `render_desk`. Wrap the tool (in Vibe Studio, step 8a):
+
+<!-- code: VIDEO_TOOL -->
+```python
+    tools=[LongRunningFunctionTool(render_submit)])
+```
+
+### Part b: render_desk in the graph
+
+`store_video` in `agent/graph.py` is the node after `render_desk`. It reads the delivered render from `runs/state.json`, where the delivery wrote it, and puts the URL and status into shared state. Add the last chain (in Vibe Studio, step 8b):
+
+<!-- code: VIDEO_EDGES -->
+```python
+           (quarantine, scripter),
+           (scripter, render_desk, store_video)])
+```
+
+In adk web, switch to **`stage6_video`**, send an idea, and answer the form. After the scripter, `render_desk` calls `render_submit`: a function call event, then its response with `status: pending`, and the run ends there. The State tab has no `render_url`. Nothing is waiting for Veo; the receipt is in the session store.
+
+Then deliver, in **tab 1**:
+
+```console
+cd ~/vibe-studio-lab
+source .venv/bin/activate
+python -m agent.deliver status
+python -m agent.deliver
+```
+
+The first command lists the pending renders it finds in the `stage6_video` sessions. The second takes the newest, polls Veo with `check` until the clip exists, writes the result to `runs/state.json`, and resumes the same session with a `function_response` carrying the call's id. That message is the second edit of part a, in `_answer` in `agent/deliver.py`. The `Part` is provided with `function_response=None`; you fill in the `FunctionResponse`, whose three fields are `id=row["call_id"]`, `name=row["name"]`, and `response=response` (in Vibe Studio, step 8a):
+
+<!-- code: DELIVER_RESPONSE -->
+```python
+    part = Part(function_response=FunctionResponse(
+        id=row["call_id"], name=row["name"], response=response))
+```
+
+The lines after it send that part into the paused session through the `Runner`; ADK matches the id to the call and continues the run. The answer completes the `render_desk` node and `store_video` runs; the command prints what the graph did. adk web does not update an open session on its own; select another session and come back, or reload the page. The `function_response` and `store_video` then follow the pending call, and the State tab holds `render_url` and `render_status`. With a real render the clip is under `app/static/renders/` and plays at its URL.
+
+Concepts used in this step:
+
+- `LongRunningFunctionTool` and the `pending` receipt
+- A workflow suspended at an agent node, with the call id in the session store
+- Resuming by id with a `function_response`, from a different process, after a restart
+- Veo through `generate_videos` and `operations.get`, with retries
+
+## Deploy: the Runner, an app, Cloud Run
+Duration: 0:10:00
+
+Every step so far ran the graph through adk web. The app in `vibestudio/` runs it through the same class the dev UI uses, a `Runner`, with its own page in front and one event stream between them. This step reads how the app is put together, runs it on your machine, and ships it to Cloud Run.
+
+### The Runner
+
+A `Runner` takes an app name, the agent or workflow, and a session service. `run_async(user_id, session_id, new_message)` yields every event the graph produces and stores them in the session. The gate's answer and the render's delivery are the same call with a `function_response` part, which is what you did by hand in steps 4 and 8:
+
+```python
+self._svc = DatabaseSessionService(db_url=config.DB_URL)
+self._runner = Runner(app_name=config.APP, agent=wf, session_service=self._svc)
+
+async def _leg(self, message, fresh=False):
+    if fresh:
+        await self._svc.create_session(app_name=config.APP, user_id=config.USER, session_id=st.run_id)
+    async for ev in self._runner.run_async(user_id=config.USER, session_id=st.run_id, new_message=message):
+        self._absorb(ev)          # fold the ADK event into RunState, publish one app event
+    self._settle()                # waiting_pick, rendering, or done
+```
+
+### The app's shape
+
+```
+vibestudio/
+  server/main.py      FastAPI: the page, /api, /static
+  server/runner.py    the Runner, RunState, the render poller
+  server/bus.py       the event bus and the SSE stream (/api/events)
+  server/api.py       the REST surface
+  server/publish.py   vibetube.dev, three attempts, then it asks
+  server/avatar.py    a portrait from your description
+  server/files.py     backlog.txt, profile.json, thumbnails
+  server/graphinfo.py the drawing, from wf.graph
+  server/agent/       the finished agent, byte-identical to the lab's solution
+  web/                the React page
+  Dockerfile · deploy.py · run.sh
+```
+
+The server owns the Runner, the Veo poller, the publisher, and the files. The page draws the graph from `GET /api/graph`, which reads `wf.graph`, and folds one SSE stream into what it shows: each event carries the run state after it, so a page that connects late is current from its first message. `server/agent/` is the finished agent as a copy, byte for byte the lab's solution (`checks/verify_app.py` keeps it so), which is why the app works whether or not every hole in the lab is filled.
+
+The production copy of the graph, `wf` at the bottom of `agent/graph.py`, is what the app drives. Its edge list is the one you built, with the third reader from step 7 and the render desk from step 8:
+
+<!-- code: EDGES -->
+```python
+        (START, scan_trends, join_research),
+        (START, read_backlog, join_research),
+        (START, read_feedback, join_research),
+        (join_research, propose_directions, direction_gate,
+         persist_direction, policy_check),
+        (policy_check, {"OK": scripter, "BLOCK": quarantine}),
+        (quarantine, scripter),
+        (scripter, render_desk, store_video),
+```
+
+### Run it here
+
+In **tab 1**, from the repo root:
+
+```console
+vibestudio/run.sh
+```
+
+The first start builds the page; then the app is on http://localhost:4700. Inside the lab repo it shares the repo's `.env` and `runs/`, so the bank and the corpus from steps 6 and 7 are connected. Type an idea or leave it empty. The graph runs left to right on the page, stops for your pick, and later for the render; when the clip lands it plays on the page, the page captures the frame at two seconds as a thumbnail, and Publish posts the clip to the event on vibetube.dev, three attempts, then it asks you to confirm the event code.
+
+### Cloud Run
+
+Cloud Run is a managed place to run a container: an image and a port in, an HTTPS URL out, instances scaled with traffic, billed per request time. `gcloud run deploy --source vibestudio` does the build too, from the Dockerfile in the folder. `deploy.py` wraps that one command and passes the environment the graph needs, read from the same places the lab uses: the project and the switches from `.env`, the two resource names from `runs/memorybank.json` and `runs/ragcorpus.json`, as `STUDIO_MEMORY_BANK` and `STUDIO_RAG_CORPUS`. The app keeps a run's state in its process, so the deploy asks for one instance kept warm and session affinity.
+
+Deploy from Vibe Studio (step 9, the button) or from **tab 1**:
+
+```console
+python vibestudio/deploy.py
+```
+
+The last line is the service URL. Head over there: it is the same workflow you built, driven by the Runner, on Cloud Run.
+
+Concepts used in this step:
+
+- `Runner`, `run_async`, and a session service outside adk web
+- An app on top of a workflow: one event stream, the state folded on the server
+- The finished agent as a byte-identical copy the app can trust
+- A container on Cloud Run, with the resource names as environment
+
+## Summary
+Duration: 0:03:00
+
+One workflow, built node by node from a single prompt to a published clip. Step 10 in Vibe Studio draws the whole graph; hover a node for what it taught and where.
+
+| Step | Concepts |
+|---|---|
+| 3 · A single prompt | An `Agent` with function tools; `function_call` and `function_response` events; why prose is a poor interface between steps |
+| 4 · Fan-out and the human pause | `Workflow`, `START`, edges as tuples; `JoinNode`; an `Agent` as a node with `output_schema`; `RequestInput` with `response_schema`, `payload` and `interrupt_id` |
+| 5 · State and the policy gate | `Event(state=...)`, parameter binding, the `user:` prefix, `runs/state.json`; a router node; policy as data; agent modes and a task agent with tools |
+| 6 · Memory Bank | Scope, extraction, consolidation, custom topics; `memories.generate` and `memories.retrieve`; `before_model_callback` and `after_agent_callback` |
+| 7 · RAG Engine | A corpus, chunking, an embedding model, retrieval by meaning; a retrieval node as one more edge into the join; a model that varies |
+| 8 · The video | `LongRunningFunctionTool`, the pending receipt, a workflow suspended at an agent node, resume by id from another process, Veo with retries |
+| 9 · Deploy | The `Runner` and `run_async`; an app on top with one SSE stream; the finished agent as a byte-identical copy; a container on Cloud Run |
+
+Design rules the graph follows:
+
+- Graphs pause for people and for receipts, never for a wait. `RequestInput` and the pending tool call both suspend the run; nothing stays alive on its behalf.
+- Every resume is one `function_response` carrying the call's id, whoever sends it: a page, a console, another process, after a restart.
+- Nodes share state by key name. `candidates`, `direction`, `render_url` move through the graph without being passed between nodes.
+- Routing is plain code and policy is data. The gate is a function and a text file, decided before any money is spent.
+- Context that belongs to one agent rides a callback on that agent. Research that produces data before the model runs is a node in the fan-out.
+- The app owns the loop, not the graph: a `Runner` drives it, an event stream shows it, the graph itself does not know a page exists.
 
 ## Congratulations
 Duration: 0:02:00
 
-You built and ran a production pipeline: one idea, three videos, two decisions per video, and six small edits: the agent's tool list, a sandbox edge list, the RequestInput in direction_gate, persist_direction in the stage 2 chain, and two edges in the production graph.
+You built one workflow, step by step, and every edit you made is still in it.
 
 | Step | What it covered |
 |---|---|
 | The pipeline as a single prompt | An `Agent` with function tools, `function_call` and `function_response` events, and the limits of prose as an interface |
-| The research fan-out and the human pause | A parallel fan-out and `JoinNode`, an `Agent` as a node, `RequestInput` for a human decision, and shared state read by parameter name |
-| The policy gate and the first production run | A function node as a router, policy stored as data, and the production app driving the same `Workflow` object |
-| Approve the thumbnail and publish | `LongRunningFunctionTool`, the `pending` receipt, `function_response` by call id, a driver-owned join condition, and a separate workflow for the side effect |
-| The audience graph in BigQuery | A property graph declared over existing tables, edge properties, GQL `MATCH`, and adding a node with one edge |
-| Session state and the user: prefix | `DatabaseSessionService`, state deltas on the event log, and the `user:` prefix read from a new session |
-| Memory Bank: connect, write, read | Creating a bank with custom topics, `memories.generate` with consolidation, and `memories.retrieve` inside a workflow node |
-
-The graph's shape did not change after the edge list was written, apart from the two edges you added. What changed between videos was the state each run started with: a preference from the session store, readings from BigQuery, and a rule from Memory Bank. The routine work ran without input. You were asked for the direction and the thumbnail, and a policy rule refused a direction before any spend. The graph and its state files are the pipeline you would hand to another creator.
+| The research fan-out and the human pause | A parallel fan-out and `JoinNode`, an `Agent` as a node, `RequestInput` for a human decision |
+| The policy gate | A function node as a router, policy stored as data, an agent in `task` mode that repairs a refused direction |
+| Memory | Memory Bank with custom topics, `memories.generate` and `memories.retrieve`, `before_model_callback` and `after_agent_callback` |
+| RAG Engine | A corpus of audience comments, embeddings and retrieval by meaning, one more edge into the join |
+| The video | `LongRunningFunctionTool`, the `pending` receipt, a workflow suspended at an agent node, `function_response` by call id from another process |
+| Deploy | The `Runner`, an app on top of it with one event stream, Cloud Run |
 
 ### Next steps
 
-- Deliver render results by webhook (the same `answer()` call over HTTP) instead of polling the farm.
-- Declare a second property graph beside `taste_graph`.
-- Replace the session and memory stores with `VertexAiSessionService` and `VertexAiMemoryBankService`.
+- Replace `DatabaseSessionService` with `VertexAiSessionService`, so the app's sessions live beside the Memory Bank and instances can come and go.
+- Deliver the render by webhook instead of polling: the same `function_response`, sent by whoever hears from Veo first.
+- Add a second person to the graph: a reviewer's `RequestInput` before publish.
+- Append new audience comments to the corpus after each publish, and watch the next run lean.

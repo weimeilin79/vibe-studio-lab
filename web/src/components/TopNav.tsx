@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Moon, Sun } from "lucide-react";
 import { STEPS } from "../steps/registry";
+import { tint } from "../steps/colors";
 import { useTheme } from "./ThemeProvider";
 import { LiveRunPill } from "./LiveRunPill";
 
@@ -30,7 +31,7 @@ export function TopNav({ activeSlug }: { activeSlug: string }) {
             Vibe<span className="holo-text">Studio</span>
           </span>
           <span className="hidden font-mono text-[10px] uppercase tracking-widest text-fg-muted sm:inline">
-            · Long-running workflows with ADK
+            · Agentic Workflow with ADK
           </span>
         </Link>
         <div className="flex items-center gap-3">
@@ -75,9 +76,9 @@ export function TopNav({ activeSlug }: { activeSlug: string }) {
                   }`}
                   style={
                     active
-                      ? { background: `${s.color}22`, color: s.color, borderColor: `${s.color}55` }
+                      ? { background: tint(s.color, 0.13), color: s.color, borderColor: tint(s.color, 0.33) }
                       : done
-                        ? { color: s.color, borderColor: `${s.color}66` }
+                        ? { color: s.color, borderColor: tint(s.color, 0.4) }
                         : undefined
                   }
                 >
@@ -108,8 +109,8 @@ export function TopNav({ activeSlug }: { activeSlug: string }) {
                     className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-all ${on ? "font-semibold" : "text-fg-muted hover:text-fg"}`}
                     style={
                       on
-                        ? { background: `${active.color}22`, color: active.color, borderColor: `${active.color}66` }
-                        : { borderColor: done ? `${active.color}66` : "var(--hairline)" }
+                        ? { background: tint(active.color, 0.13), color: active.color, borderColor: tint(active.color, 0.4) }
+                        : { borderColor: done ? tint(active.color, 0.4) : "var(--hairline)" }
                     }
                   >
                     <span className="font-mono">

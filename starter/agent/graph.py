@@ -1,18 +1,14 @@
 """THE workflow - an idea in, a policy-cleared direction out, one human door.
 
-  2 readers (more join later) -> join -> propose_directions (3 candidates -> state)
-                              -> direction_gate (pick 1/2/3, or your own)
-                              -> persist_direction -> policy_check (OK/BLOCK)
-                              -> scripter -> store_script   |   quarantine
+  trends + backlog + feedback -> join -> propose_directions (4 candidates)
+                          -> direction_gate (pick 1-4)
+                          -> persist_direction -> policy_check (OK/BLOCK)
+                          -> scripter -> render_desk -> store_video   |   quarantine -> scripter
+                          -> render_desk (Veo, a long-running tool) -> store_video
 
 The graph pauses for PEOPLE (the form) and refuses with a ROUTER (the policy)
-BEFORE any money is spent. It never waits for the WORLD - renders live in the
-desk session (agent/desk.py), because resuming a graph re-runs nodes and
-would re-submit side effects.
-
-The research fan-out GROWS across the lab: read_graph joins in the BigQuery
-chapter and read_memory in the Memory Bank chapter - each one is a single
-edge you add, and the live map grows a node the moment you do.
+BEFORE any money is spent. Memory (step 6) is not a node: it is two callbacks
+on the agents, in agent/memory.py.
 """
 import json
 import pathlib
@@ -23,56 +19,53 @@ from google.adk.events.request_input import RequestInput
 from google.adk.workflow import START, JoinNode
 
 from . import config, state
-from .schemas import Directions, Script
+from .cleanup_tools import find_policy_hits, suggest_replacement
+from .desk import render_desk
+from .schemas import CleanedDirection, Directions, Script
 
 
 # ── research fan-out (pure compute + reads; it grows chapter by chapter) ────
 def scan_trends(node_input):
-    from world import platform
-    return Event(output={"trends": platform.trends()})
+    from .trends import sample_trends
+    return Event(output={"trends": sample_trends()})
 
 
-def read_backcatalog(node_input):
-    from world import platform
-    creds = state.load().get("creds")
-    vids = platform.outcomes(creds["creator_id"]) if creds else []
-    slim = [{"title": v["title"], "lap": v["lap"], "avg_watch_pct": v["avg_watch_pct"],
-             "median_drop_ms": v["median_drop_ms"], "dropped_pct": v["dropped_pct"]}
-            for v in vids]
-    return Event(output={"backcatalog": slim})
+BACKLOG_FILE = pathlib.Path(__file__).parent / "backlog.txt"
 
 
-def read_graph(node_input):
-    """The measuring instrument: readings; the graph exists before you do.
-    Wired into the fan-out in the BigQuery chapter - one edge."""
-    from bqgraph import queries
-    report = queries.research_report()
-    st = state.load()
-    st["graph_query_ids"] = [q["id"].split("#")[1] for q in report.get("queries", [])
-                             if q.get("rows")]
-    st["graph_report"] = report
-    state.save(st)
-    return Event(output={"audience_graph": report})
+def backlog_notes() -> list[str]:
+    """The creator's backlog: one idea per line, comments skipped."""
+    return [l.strip() for l in BACKLOG_FILE.read_text().splitlines()
+            if l.strip() and not l.startswith("#")]
 
 
-def read_memory(node_input):
-    """Fresh Memory Bank retrieve each run; records citable refs + constraints.
-    Wired into the fan-out in the Memory Bank chapter - one edge."""
-    from . import memory
+def idea_text(node_input) -> str:
+    """Tonight's idea: the text of the message that started the run."""
+    parts = getattr(node_input, "parts", None)
+    if parts:
+        return " ".join(p.text for p in parts if getattr(p, "text", None)).strip()
+    if isinstance(node_input, str):
+        return node_input.strip()
+    return state.load().get("hint", "") or ""
+
+
+def read_backlog(node_input):
+    return Event(output={"backlog": backlog_notes(), "idea": idea_text(node_input)})
+
+
+def read_feedback(node_input):
+    """The third reader (step 7): what the audience wrote under past videos,
+    the passages nearest to tonight's idea. Retrieval, not a model call."""
+    from . import rag
+    idea = idea_text(node_input)
+    query = idea or "what viewers liked and what they complained about"
     try:
-        facts = memory.recall()
-    except Exception as e:  # cloud hiccup -> honest empty, never a crash
-        print(f"  [memory] unavailable ({str(e)[:60]}) -> empty")
-        facts = []
-    entries = [{"ref": f"memory#{m['id'][:8]}", "topic": m["topic"], "fact": m["fact"]}
-               for m in facts]
-    rules = " ".join(m["fact"] for m in facts if m["topic"] == "CHANNEL_CONSTRAINTS")
-    st = state.load()
-    st["memory_facts"] = [{"id": m["id"], "ref": m["id"][:8],
-                           "topic": m["topic"], "fact": m["fact"]} for m in facts]
-    state.save(st)
-    yield Event(state={"constraints": rules or "(none yet)"})
-    yield Event(output={"memory": entries})
+        hits = rag.retrieve(query)
+    except Exception as e:
+        print(f"  [rag] feedback unavailable ({str(e)[:80]})")
+        return Event(output={"query": query, "feedback": [],
+                             "note": "no corpus connected - run: python -m agent.rag"})
+    return Event(output={"query": query, "feedback": [h["text"] for h in hits]})
 
 
 join_research = JoinNode(name="join_research")
@@ -82,26 +75,46 @@ join_research = JoinNode(name="join_research")
 # ── the proposer · a workflow node, so it decides in ONE call ───────────────
 PROPOSE_INSTRUCTION = (
     "You run the creator's short-video channel. The message you received is "
-    "tonight's research bundle as JSON: one key per reader node (scan_trends, "
-    "read_backcatalog, and in later steps read_memory and read_graph); the "
-    "creator's idea (may be empty) rides with it.\n"
+    "tonight's research bundle as JSON, one key per reader node: scan_trends "
+    "holds ten trends right now, each a format paired with a look (a visual "
+    "style), never a subject, each with a heat score; read_backlog "
+    "holds the creator's own notes, ideas they want to make someday, and "
+    "tonight's idea from the creator, which may be empty; read_feedback, when "
+    "present, holds what the audience wrote under past videos, the passages "
+    "nearest to tonight's idea.\n"
+    "Work like this. If the creator gave an idea tonight, that idea is the "
+    "brief and candidates 1 to 3 are three versions of IT: the same subject "
+    "and the same premise in every one, the creator's own nouns kept, never "
+    "replaced by a trend or a backlog note. The research adds elements to the "
+    "idea, it never overwrites it: a trend lends its format and its look, and "
+    "a backlog note lends a detail or a setting. Say in the angle which trend "
+    "and which note each candidate borrowed. Only when there "
+    "is no idea tonight do you build from the backlog: merge the notes that "
+    "fit together best, then find the trending topic each merged idea can "
+    "ride, preferring higher heat. Either way a candidate is one filmable "
+    "scene. If there is feedback, let it steer candidates 1 to 3: lean into "
+    "what viewers praised, avoid what they complained about, and name the "
+    "comment in the angle.\n"
     "PITCH exactly FOUR candidate directions for the next <=20s video. Each "
     "candidate: a title (<=60 chars, a concrete filmable characterful scene - "
     "never a meta content-strategy topic), an angle (the twist, one line), and "
-    "a hook: 2-4 punchy Title Case words printed as a sticker on the thumbnail "
-    "- the feeling of the moment, no punctuation, no emoji.\n"
-    "Candidates 1 to 3 are publishable directions grounded in the research.\n"
+    "a hook: 2-4 punchy Title Case words, the video's sticker line "
+    "- the feeling of the moment, no punctuation, no emoji, and a style: the "
+    "look of the clip in one line, taken from the trend the candidate rides "
+    "(its text after 'look:'), so the four candidates differ in look as well "
+    "as in twist.\n"
+    "Candidates 1 to 3 are publishable and each cites at least one backlog note "
+    "and one trend.\n"
     "Candidate 4 is the outrage-bait direction the channel must never publish, "
     "pitched the way a rival channel would. Its title MUST contain at least one "
     "of these words, spelled exactly: competitor, scam, revenge, humiliate, "
     "fake, dangerous stunt. Its hook is provocative too. It exists so the "
     "policy gate has something to refuse.\n"
-    "Every evidence entry must cite a REAL source: 'trends', 'backcatalog', "
-    "'memory#<id>' (ids present in the memory section only), or 'graph#<n>' "
-    "(query numbers present in the graph section only). Empty or absent "
-    "sections are never cited - never invent evidence.\n"
-    "If the memory section contains CHANNEL_CONSTRAINTS rules, candidates 1 to "
-    "3 MUST honor them.")
+    "Every evidence entry must cite a REAL source: 'trends', 'backlog', "
+    "'feedback', or 'memory' (only when a MEMORY section is present). Empty or "
+    "absent sections are never cited - never invent evidence.\n"
+    "If the MEMORY section contains CHANNEL_RULES, candidates 1 to 3 MUST "
+    "honor them.")
 
 propose_directions = Agent(
     name="propose_directions",
@@ -122,16 +135,13 @@ def direction_gate(node_input: Directions):
 
 
 def persist_direction(node_input, candidates: list = [], constraints: str = ""):
-    """Resolve the human's pick into THE direction - and remember the taste.
-    `candidates` arrives from shared STATE (nobody passes it); `user:` keys
-    are per-user and cross-session, so the NEXT lap's idea box can suggest
-    something like this one.
+    """Resolve the human's pick into THE direction, and write it to shared state.
 
-    A human door must degrade to a sensible choice, never raise: a null,
-    missing, blank, or out-of-range pick resolves to candidate 1. (The
-    schema's `required` is empty on purpose: ADK re-validates a STORED answer
-    on every resume, and a required field that arrived as null would make
-    the session unresumable.)"""
+    `candidates` and `constraints` are not passed by anyone: ADK binds them from
+    shared state because the parameter names match state keys. The pick comes
+    in as node_input, the gate's answer. A human door must degrade to a
+    sensible choice, never raise: a null, missing, blank, or out-of-range pick
+    resolves to candidate 1."""
     ni = node_input if isinstance(node_input, dict) else {}
     raw = ni.get("pick")
     pick = str(raw).strip() if raw is not None else ""
@@ -141,17 +151,21 @@ def persist_direction(node_input, candidates: list = [], constraints: str = ""):
     else:
         chosen = {"title": "untitled", "angle": "", "evidence": []}
     hook = chosen.get("hook") or " ".join(chosen["title"].split()[:4])
-    yield Event(state={"direction": chosen["title"], "angle": chosen.get("angle", ""),
-                       "hook": hook, "constraints": constraints or "(none yet)",
-                       "user:prefs": {"last_direction": chosen["title"],
-                                      "idea": state.load().get("hint", "")}})
+    # TODO: PERSIST_STATE - yield an Event whose state holds direction, angle, hook, constraints, and user:prefs
+    _record_brief(chosen, hook)
+    yield Event(output=chosen)
+
+
+def _record_brief(chosen: dict, hook: str) -> None:
+    """The driver's copy, in runs/state.json: the file the run shares with
+    code outside ADK. The delivery writes the render there in step 8, and
+    the app reads it after the run."""
     st = state.load()
     st["brief"] = {"topic": chosen["title"], "angle": chosen.get("angle", ""),
                    "hook": hook, "evidence": chosen.get("evidence", [])}
-    st["direction"] = chosen["title"]                    # driver clipboard copy
+    st["direction"] = chosen["title"]
     st["hook"] = hook
     state.save(st)
-    yield Event(output=chosen)
 
 
 # ── the policy gate · a deterministic router, BEFORE any money is spent ─────
@@ -171,32 +185,24 @@ def policy_check(node_input):
     text = f"{node_input.get('title', '')} {node_input.get('angle', '')}".lower()
     bad = [w for w in policy_words() if re.search(rf"\b{re.escape(w)}\b", text)]
     st = state.load()
-    lin = st.setdefault("lineage", {"evidence": [], "memory_refs": [], "graph_refs": [],
-                                    "render": {}, "approvals": [], "gates": {}})
+    lin = st.setdefault("lineage", {"evidence": [], "gates": {}})
     lin.setdefault("gates", {})["policy"] = {"ok": not bad, "hits": bad}
     state.save(st)
     # TODO: POLICY_ROUTE - return an Event whose output is node_input and whose route is "BLOCK" if bad else "OK"
 
 
-def quarantine(node_input):
-    """The polite stop: your own policy refused this direction. The lap ends;
-    start again with a different one - nothing was rendered, nothing was paid."""
-    st = state.load()
-    st["blocked"] = {"direction": node_input.get("title", ""),
-                     "hits": st.get("lineage", {}).get("gates", {})
-                               .get("policy", {}).get("hits", [])}
-    state.save(st)
-    return Event(output={"cleared": False, "why": "policy BLOCK"})
 
 
 # ── pure production: script the cleared direction (runs quietly) ────────────
 SCRIPT_INSTRUCTION = (
     "Write the production script for the approved video direction. The message "
-    "you received is the direction as JSON: title, angle, hook.\n"
+    "you received is the direction as JSON: title, angle, hook, style.\n"
     "Channel constraints: {constraints}\n"
     "Deliver: title (<=60 chars, honoring the direction), description "
-    "(1-2 sentences), 3-5 tags, an opening_line, and EXACTLY 3 shots (each "
-    "one visual sentence for a render model, in cozy low-poly style).\n"
+    "(1-2 sentences), 3-5 tags, an opening_line, EXACTLY 3 shots (each one "
+    "visual sentence for a render model, written in the direction's style), "
+    "and style: the direction's style, copied through, or a fitting look of "
+    "your own if the direction has none.\n"
     "If constraints include a conclusion-first rule, opening_line must state "
     "the final outcome outright, and only then set conclusion_first=true. "
     "Never claim conclusion_first for a teaser or a question.")
@@ -207,11 +213,11 @@ scripter = Agent(
     instruction=SCRIPT_INSTRUCTION,
     output_schema=Script)
 
-# the quarantine node of step 5b: a task-mode agent, assembled by the student
+# the quarantine node of step 5c: a task-mode agent, assembled by the student
 # in stage3_router/agent.py from this instruction and agent/cleanup_tools.py
 QUARANTINE_INSTRUCTION = (
     "The channel's policy refused the direction you received. The message is "
-    "the direction as JSON: title, angle, hook. Make it publishable without "
+    "the direction as JSON: title, angle, hook, style. Make it publishable without "
     "changing the scene.\n"
     "1. Call find_policy_hits with the title, and again with the angle, to "
     "learn which words are refused.\n"
@@ -219,52 +225,51 @@ QUARANTINE_INSTRUCTION = (
     "with the suggestion (or a gentle synonym if none is listed).\n"
     "3. Call find_policy_hits again on the rewritten title and angle. Repeat "
     "steps 2 and 3 until both come back clean.\n"
-    "4. Only then call finish_task with the cleaned title, angle and hook.")
+    "4. Only then call finish_task with the cleaned title, angle and hook, "
+    "and the style unchanged.")
+
+quarantine = Agent(
+    name="quarantine",
+    model=config.MODEL,
+    mode="task",
+    instruction=QUARANTINE_INSTRUCTION,
+    tools=[find_policy_hits, suggest_replacement],
+    output_schema=CleanedDirection)
 
 
-def store_script(node_input: Script):
-    st = state.load()
-    st["script"] = node_input.model_dump()
-    st["duration_ms"] = 12000
-    brief = st.get("brief", {})
-    evidence = brief.get("evidence", [])
-    # citations become lineage; graph citations carry their re-runnable rows
-    report = {q["id"]: q for q in st.get("graph_report", {}).get("queries", [])}
-    for e in evidence:
-        if e["source"] in report:
-            e["rows_snapshot"] = report[e["source"]]["rows"]
-    # standalone runs (the stage apps) have no lap driver to scaffold the ledger
-    lin = st.setdefault("lineage", {"evidence": [], "memory_refs": [], "graph_refs": [],
-                                    "render": {}, "approvals": [], "gates": {}})
-    lin["topic"] = brief.get("topic", node_input.title)
-    lin["angle"] = brief.get("angle", "")
-    lin["evidence"] = evidence
-    lin["memory_refs"] = sorted({e["source"] for e in evidence
-                                 if e["source"].startswith("memory#")})
-    lin["graph_refs"] = sorted({e["source"] for e in evidence
-                                if e["source"].startswith("graph#")})
-    lin["hook"] = {"hook_at_ms": 0 if node_input.conclusion_first else 5000,
-                   "conclusion_first": node_input.conclusion_first}
-    state.save(st)
-    print(f"  script: {node_input.title!r} · {len(node_input.shots)} shots"
-          f" · evidence {len(evidence)}")
-    yield Event(message="script ready", state={"script_title": node_input.title})
+def store_video(node_input):
+    """After the desk (step 8): the delivered render, from runs/state.json
+    where deliver wrote it, into shared state and the run's output."""
+    render = state.load().get("render") or {}
+    url = render.get("url") or ""
+    status = render.get("status", "")
+    if not render:
+        # nothing was delivered: the run never paused at render_desk, which
+        # happens when render_submit is a plain tool, not a LongRunningFunctionTool
+        status = "not delivered"
+        said = ("no render was delivered: the run did not pause at render_desk. "
+                "Is render_submit wrapped in LongRunningFunctionTool? (step 8a, edit 1)")
+    elif status == "done":
+        said = url or "prebaked stand-in, no file"
+    else:
+        said = f"failed: {render.get('reason', '')}"
+    yield Event(output={"status": status, "url": url, "operation": render.get("operation", "")},
+                state={"render_url": url, "render_status": status},
+                message=f"video: {said}")
 
 
 wf = Workflow(
     name="lap",
-    description="research -> the human door -> the policy gate -> script",
+    description="research (trends, backlog, feedback) -> the human door -> the policy gate -> script",
     edges=[
         (START, scan_trends, join_research),
-        (START, read_backcatalog, join_research),
+        (START, read_backlog, join_research),
+        (START, read_feedback, join_research),
         (join_research, propose_directions, direction_gate,
          persist_direction, policy_check),
         (policy_check, {"OK": scripter, "BLOCK": quarantine}),
-        (scripter, store_script),
-        # TODO: GRAPH_EDGE — delete me, uncomment below: the audience graph joins the fan-out (Codelab: the BigQuery step)
-        # (START, read_graph, join_research),
-        # TODO: MEMORY_EDGE — delete me, uncomment below: the channel's memory joins the fan-out (Codelab: the Memory Bank step)
-        # (START, read_memory, join_research),
+        (quarantine, scripter),
+        (scripter, render_desk, store_video),
     ])
 # NOTE: while the EDGES hole is open, wf has no edges. Importing this module
 # stays legal (the stage apps borrow its nodes); only RUNNING a lap trips the

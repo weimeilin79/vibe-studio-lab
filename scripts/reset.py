@@ -1,11 +1,9 @@
-"""Wipe local run state for a fresh start (never touches BigQuery / Memory Bank).
+"""Wipe local run state for a fresh start (never touches Memory Bank or the corpus).
 Run: python scripts/reset.py [--all] [--archive]
-     --all      also wipes the wall + the thumbnails its rows point at, AND the
-                channel's taste (the `user:` keys) - a factory reset
+     --all      also wipes the channel's taste (the `user:` keys) - a factory reset
      --archive  copies what it removes into runs/archive/<stamp>/ first
 
-The Now page's Restart control imports clear() from here, so the button and
-the CLI cannot drift into two different opinions about what a lap owns.
+scripts/starter.sh calls this after restoring the hands-on files.
 """
 import json
 import pathlib
@@ -16,22 +14,17 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 RUNS = ROOT / "runs"
 ARCHIVE = RUNS / "archive"
-THUMBS = ROOT / "app" / "static" / "thumbs"
 
-# What ONE lap owns on disk. Everything here is written by a lap, read back as
-# that lap's truth, and is a lie the moment the next lap starts:
-#   state.json      the lap itself
-#   sessions.db     the lap's ADK session, incl. its open long-running calls
-#   ui_busy.json    which worker is running (a pid, and pids get recycled)
-#   ui_last.json    how the last worker exited - failed_card() renders it
-#   ui_control.json the receipt End/Restart leaves for the page
-#   *_run.log       the worker output failed_card() and stages.log_tail() show
-LAP_FILES = ("state.json", "sessions.db", "ui_busy.json",
-             "ui_last.json", "ui_control.json")
-# NOT here, on purpose: runs/wall.db is PUBLISHED history (the Channel page and
-# agent.learn read it, and its rows point at app/static/{thumbs,renders}), and
-# runs/archive/ is where the archived copies go. Only --all touches the wall.
-WALL_FILES = ("wall.db",)
+# What a run leaves on disk. Everything here is written by a run and is stale
+# the moment the next one starts:
+#   state.json      the driver's copy of the run (the brief, the script, the render)
+#   sessions.db     the ADK session store the stage apps and adk web write
+#   ui_last.json    how the last console worker exited
+#   *_run.log       the console workers' output
+# runs/memorybank.json, runs/ragcorpus.json and runs/deploy.json stay: they are
+# connections to things in your project, not run state. runs/archive/ is where
+# the archived copies go.
+LAP_FILES = ("state.json", "sessions.db", "ui_last.json")
 
 # ── the half of sessions.db that is NOT this lap's ──────────────────────────
 # runs/sessions.db is two stores sharing one file, and only one of them is a
@@ -44,8 +37,8 @@ WALL_FILES = ("wall.db",)
 #
 # So the file still goes. A brand-new file is the only clean-slate guarantee
 # Restart can make - it is the learner's way out of a session that can never
-# resume again (a stored interrupt response that fails re-validation forever,
-# see schemas.direction_schema), and a selective DELETE cannot help you when
+# resume again (a stored interrupt response that fails re-validation forever),
+# and a selective DELETE cannot help you when
 # the store is the thing that is broken. The user's half is carried across the
 # swap by hand instead: read out before, written back after.
 USER_PREFIX = "user:"
@@ -165,13 +158,7 @@ def lap_paths() -> list[pathlib.Path]:
             if p.exists()]
 
 
-def wall_paths() -> list[pathlib.Path]:
-    """Published history: the wall, and the thumbnails its rows point at."""
-    return [p for p in [RUNS / f for f in WALL_FILES] if p.exists()] + \
-           sorted(THUMBS.glob("*.png"))
-
-
-def clear(wall: bool = False, archive: bool = False,
+def clear(all_: bool = False, archive: bool = False,
           keep_user_state: bool | None = None) -> dict:
     """Remove the lap's artifacts. Returns
     {'cleared': [...], 'archive': str|'', 'stuck': [...], 'kept_user_state': [...]}.
@@ -181,15 +168,13 @@ def clear(wall: bool = False, archive: bool = False,
     it reports it instead, so a caller can say so on the page.
 
     keep_user_state carries the `user:` keys across the sessions.db swap.
-    None - the default - means "yes, unless this is a --all factory reset":
-    --all already means the durable things go too (see __main__), and the two
-    lists are the same idea, not two different ones.
+    None - the default - means "yes, unless this is a --all factory reset".
     """
     if keep_user_state is None:
-        keep_user_state = not wall
+        keep_user_state = not all_
     # read BEFORE the file goes; the courier writes into the new one after
     carried = read_user_state() if keep_user_state else {}
-    targets = lap_paths() + (wall_paths() if wall else [])
+    targets = lap_paths()
     into = ""
     if archive and targets:
         stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -246,7 +231,7 @@ def quarantine(*paths: pathlib.Path) -> list[str]:
 
 
 if __name__ == "__main__":
-    out = clear(wall="--all" in sys.argv, archive="--archive" in sys.argv)
+    out = clear(all_="--all" in sys.argv, archive="--archive" in sys.argv)
     for p in out["cleared"]:
         print(f"removed {p}")
     for p in out["stuck"]:
@@ -261,5 +246,4 @@ if __name__ == "__main__":
         print("no user: keys to keep (nothing durable had been stored yet)")
     if out["archive"]:
         print(f"archived a copy of each into {out['archive']}")
-    print("reset done" + (" (restart the server if you wiped the wall)"
-                          if "--all" in sys.argv else ""))
+    print("reset done")

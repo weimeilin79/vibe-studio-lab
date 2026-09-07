@@ -6,15 +6,15 @@
    theme-agnostic. */
 @theme {
   --font-display: "Archivo", system-ui, sans-serif;
-  --font-sans: "Montserrat", system-ui, -apple-system, sans-serif;
+  --font-sans: "Google Sans", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
 
-  --color-vibe-blue: #3b82f6;
-  --color-vibe-purple: #8b5cf6;
-  --color-vibe-cyan: #22d3ee;
-  --color-vibe-amber: #f59e0b;
-  --color-vibe-green: #34d399;
-  --color-vibe-red: #f43f5e;
+  --color-vibe-blue: var(--vibe-blue);
+  --color-vibe-purple: var(--vibe-purple);
+  --color-vibe-cyan: var(--vibe-cyan);
+  --color-vibe-amber: var(--vibe-amber);
+  --color-vibe-green: var(--vibe-green);
+  --color-vibe-red: var(--vibe-red);
 
   --color-stage: var(--stage);
   --color-card: var(--card);
@@ -43,7 +43,15 @@
   }
 }
 
+/* Accent colors. Bright on the dark stage; the light theme uses darker
+   shades of the same hues so labels and thin strokes stay readable on white. */
 :root {
+  --vibe-blue: #3b82f6;
+  --vibe-purple: #8b5cf6;
+  --vibe-cyan: #22d3ee;
+  --vibe-amber: #f59e0b;
+  --vibe-green: #34d399;
+  --vibe-red: #f43f5e;
   --stage: #08080b;
   --card: #121217;
   --card-hover: #1b1b22;
@@ -62,6 +70,12 @@
 }
 
 :root.light {
+  --vibe-blue: #1d4ed8;
+  --vibe-purple: #6d28d9;
+  --vibe-cyan: #0e7490;
+  --vibe-amber: #b45309;
+  --vibe-green: #047857;
+  --vibe-red: #be123c;
   --stage: #f9f9fb;
   --card: #ffffff;
   --card-hover: #f4f4f5;

@@ -16,7 +16,7 @@ from agent import config
 from agent.cleanup_tools import find_policy_hits, suggest_replacement
 from agent.graph import (PROPOSE_INSTRUCTION, QUARANTINE_INSTRUCTION,
                          SCRIPT_INSTRUCTION, direction_gate, persist_direction,
-                         policy_check, read_backcatalog, scan_trends)
+                         policy_check, read_backlog, scan_trends)
 from agent.schemas import CleanedDirection, Directions, Script
 
 join_research = JoinNode(name="join_research")
@@ -33,7 +33,7 @@ scripter = Agent(
     instruction=SCRIPT_INSTRUCTION,
     output_schema=Script)
 
-def quarantine(node_input):  # TODO: QUARANTINE - 5b replaces this placeholder with the task agent
+def quarantine(node_input):  # TODO: QUARANTINE - 5c replaces this placeholder with the task agent
     return Event(output={"blocked": True, "title": node_input.get("title", "")},
                  message="blocked: the channel's policy refused this direction")
 
@@ -41,6 +41,5 @@ root_agent = Workflow(
     name="stage3_router",
     description="research -> you -> the policy gate -> a script",
     edges=[(START, scan_trends, join_research),
-           (START, read_backcatalog, join_research),
-           (join_research, propose_directions, direction_gate,
-            persist_direction)])  # TODO: ROUTER_EDGES - append policy_check, then its two routes
+           (START, read_backlog, join_research),
+           (join_research, propose_directions, direction_gate)])  # TODO: ROUTER_EDGES - 5a: append persist_direction; 5b: append policy_check, then its two routes

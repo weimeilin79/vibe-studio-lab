@@ -1,6 +1,6 @@
 """Author-side proof #2: every code block the codelab SHOWS for a registry
 hole is byte-identical to the registry snippet (which verify_holes already
-proves identical to solutions/). Codelab -> registry -> solutions: one
+proves round-trips). Codelab -> registry -> the tree: one
 chain, no drift.
 
 v6 anchor: an invisible HTML comment right before the fence -
@@ -17,8 +17,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from checks.holes import HOLES  # noqa: E402
 
-SHOWN_HOLES = {"TOOLS", "FANOUT_JOIN", "FANOUT_EDGES", "PROPOSER", "GATE_INPUT", "STAGE2_EDGES", "POLICY_ROUTE", "QUARANTINE", "ROUTER_EDGES", "RESUME", "EDGES", "GRAPH_EDGE", "MEMORY_EDGE",
-               "JOIN_CONDITION", "EDGE_TABLE", "GENERATE"}
+SHOWN_HOLES = {"TOOLS", "FANOUT_JOIN", "FANOUT_EDGES", "PROPOSER", "GATE_INPUT", "STAGE2_EDGES", "PERSIST_STATE", "POLICY_ROUTE", "QUARANTINE", "ROUTER_EDGES", "MEMORY_RECALL", "MEMORY_REMEMBER", "RAG_NODE", "VIDEO_TOOL", "DELIVER_RESPONSE", "VIDEO_EDGES", "EDGES"}
 md = (ROOT / "CODELAB.md").read_text()
 pattern = re.compile(
     r"<!-- code: (\w+) -->\s*```(?:python|sql)\n(.*?)```", re.S)

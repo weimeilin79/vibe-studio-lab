@@ -1,61 +1,200 @@
-import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { In, StepHeader } from "../components/shared";
-import { COLORS } from "./colors";
+import { COLORS, tint } from "./colors";
 import { STEPS } from "./registry";
 
-type Kind = "func" | "agent" | "human" | "router" | "desk" | "later" | "join";
+type Kind = "start" | "function" | "join" | "agent" | "human" | "router" | "task" | "desk";
 
-interface Node {
+interface GNode {
   name: string;
-  sub: string;
   kind: Kind;
+  layer: number;
+  row: number;
+  rows: number;
+  step: string;
 }
 
-/** The pipeline, left to right, as the student will see it run. */
-const PIPELINE: Node[][] = [
-  [
-    { name: "scan_trends", sub: "reader", kind: "func" },
-    { name: "read_backcatalog", sub: "reader", kind: "func" },
-    { name: "read_graph", sub: "step 8", kind: "later" },
-    { name: "read_memory", sub: "step 9", kind: "later" },
-  ],
-  [{ name: "join_research", sub: "JoinNode", kind: "join" }],
-  [{ name: "propose_directions", sub: "Agent · 3 candidates", kind: "agent" }],
-  [{ name: "direction_gate", sub: "RequestInput · you pick", kind: "human" }],
-  [{ name: "policy_check", sub: "router · OK / BLOCK", kind: "router" }],
-  [{ name: "scripter", sub: "Agent · the script", kind: "agent" }],
-  [{ name: "render_submit ×3", sub: "LongRunningFunctionTool", kind: "desk" }],
-  [{ name: "thumbnail", sub: "you approve", kind: "human" }],
-  [{ name: "publish", sub: "eval gate → wall", kind: "func" }],
+/** The finished workflow, the way the app draws it: layers snake across rows,
+ *  the first row runs left to right, the second runs back. */
+const NODES: GNode[] = [
+  { name: "__START__", kind: "start", layer: 0, row: 0, rows: 1, step: "" },
+  { name: "scan_trends", kind: "function", layer: 1, row: 0, rows: 3, step: "step 4" },
+  { name: "read_backlog", kind: "function", layer: 1, row: 1, rows: 3, step: "step 4" },
+  { name: "read_feedback", kind: "function", layer: 1, row: 2, rows: 3, step: "step 7" },
+  { name: "join_research", kind: "join", layer: 2, row: 0, rows: 1, step: "step 4" },
+  { name: "propose_directions", kind: "agent", layer: 3, row: 0, rows: 1, step: "step 4 · 6" },
+  { name: "direction_gate", kind: "human", layer: 4, row: 0, rows: 1, step: "step 4" },
+  { name: "persist_direction", kind: "function", layer: 5, row: 0, rows: 1, step: "step 5" },
+  { name: "policy_check", kind: "router", layer: 6, row: 0, rows: 1, step: "step 5" },
+  { name: "scripter", kind: "agent", layer: 7, row: 0, rows: 2, step: "step 5 · 6" },
+  { name: "quarantine", kind: "task", layer: 7, row: 1, rows: 2, step: "step 5" },
+  { name: "render_desk", kind: "desk", layer: 8, row: 0, rows: 1, step: "step 8" },
+  { name: "store_video", kind: "function", layer: 9, row: 0, rows: 1, step: "step 8" },
 ];
 
-const KIND_STYLE: Record<Kind, { border: string; bg: string; text: string; dashed?: boolean }> = {
-  func: { border: "var(--hairline)", bg: "var(--card)", text: "var(--fg)" },
-  join: { border: "var(--hairline)", bg: "var(--overlay)", text: "var(--fg)" },
-  agent: { border: `${COLORS.purple}66`, bg: `${COLORS.purple}14`, text: COLORS.purple },
-  human: { border: `${COLORS.amber}88`, bg: `${COLORS.amber}1a`, text: COLORS.amber },
-  router: { border: `${COLORS.red}66`, bg: `${COLORS.red}12`, text: COLORS.red },
-  desk: { border: `${COLORS.cyan}66`, bg: `${COLORS.cyan}12`, text: COLORS.cyan },
-  later: { border: "var(--hairline)", bg: "transparent", text: "var(--fg-muted)", dashed: true },
+const EDGES: { from: string; to: string; route?: string }[] = [
+  { from: "__START__", to: "scan_trends" },
+  { from: "__START__", to: "read_backlog" },
+  { from: "__START__", to: "read_feedback" },
+  { from: "scan_trends", to: "join_research" },
+  { from: "read_backlog", to: "join_research" },
+  { from: "read_feedback", to: "join_research" },
+  { from: "join_research", to: "propose_directions" },
+  { from: "propose_directions", to: "direction_gate" },
+  { from: "direction_gate", to: "persist_direction" },
+  { from: "persist_direction", to: "policy_check" },
+  { from: "policy_check", to: "scripter", route: "OK" },
+  { from: "policy_check", to: "quarantine", route: "BLOCK" },
+  { from: "quarantine", to: "scripter" },
+  { from: "scripter", to: "render_desk" },
+  { from: "render_desk", to: "store_video" },
+];
+
+const ORDER = ["__START__", "scan_trends", "read_backlog", "read_feedback", "join_research", "propose_directions", "direction_gate", "persist_direction", "policy_check", "scripter", "render_desk", "store_video"];
+
+const KIND_COLOR: Record<Kind, string> = {
+  start: "currentColor",
+  function: "currentColor",
+  join: COLORS.cyan,
+  agent: COLORS.purple,
+  human: COLORS.amber,
+  router: COLORS.red,
+  task: COLORS.purple,
+  desk: COLORS.amber,
+};
+const KIND_LABEL: Record<Kind, string> = {
+  start: "",
+  function: "function",
+  join: "join",
+  agent: "agent",
+  human: "your pick",
+  router: "router",
+  task: "agent (mode: task)",
+  desk: "long-running tool",
 };
 
-const YOU = ["Type the video idea (or leave it empty).", "Pick one of three directions, or write your own.", "Approve or regenerate the thumbnail."];
+const COLS = 5;
+const COL = 200;
+const STACK = 84;
+const W = 160;
+const H = 34;
+const PAD = 26;
+const mono = { fontFamily: "var(--font-mono)" } as const;
+
+function SnakeGraph() {
+  const rowOf = (layer: number) => Math.floor(layer / COLS);
+  const colOf = (layer: number) => (rowOf(layer) % 2 === 0 ? layer % COLS : COLS - 1 - (layer % COLS));
+  const rows = Math.max(...NODES.map((n) => rowOf(n.layer))) + 1;
+  const stackOf = Array.from({ length: rows }, (_, r) => Math.max(1, ...NODES.filter((n) => rowOf(n.layer) === r).map((n) => n.rows)));
+  const rowTop: number[] = [];
+  let y = PAD;
+  for (let r = 0; r < rows; r++) {
+    rowTop.push(y);
+    y += stackOf[r] * STACK + 34;
+  }
+  const height = y;
+  const width = PAD * 2 + COLS * COL - (COL - W);
+  const pos = new Map<string, { x: number; y: number }>();
+  for (const n of NODES) {
+    const r = rowOf(n.layer);
+    const mid = rowTop[r] + (stackOf[r] * STACK) / 2;
+    pos.set(n.name, { x: PAD + W / 2 + colOf(n.layer) * COL, y: mid + (n.row - (n.rows - 1) / 2) * STACK });
+  }
+  const layerOf = new Map(NODES.map((n) => [n.name, n.layer]));
+  const labelAbove = new Set(EDGES.filter((e) => pos.get(e.from)!.x === pos.get(e.to)!.x && pos.get(e.from)!.y > pos.get(e.to)!.y).map((e) => e.to));
+  const path = (from: string, to: string) => {
+    const A = pos.get(from)!;
+    const B = pos.get(to)!;
+    const la = layerOf.get(from)!;
+    const lb = layerOf.get(to)!;
+    if (rowOf(la) !== rowOf(lb)) {
+      const y1 = from === "__START__" ? A.y + 14 : A.y + H / 2;
+      const y2 = B.y - H / 2;
+      return A.x === B.x ? `M${A.x} ${y1} L${B.x} ${y2}` : `M${A.x} ${y1} C ${A.x} ${(y1 + y2) / 2}, ${B.x} ${(y1 + y2) / 2}, ${B.x} ${y2}`;
+    }
+    if (A.x === B.x) {
+      const up = B.y < A.y;
+      return `M${A.x} ${A.y + (up ? -H / 2 : H / 2)} L${B.x} ${B.y + (up ? H / 2 : -H / 2)}`;
+    }
+    const dir = rowOf(la) % 2 === 0 ? 1 : -1;
+    const x1 = from === "__START__" ? A.x + 14 * dir : A.x + (W / 2) * dir;
+    const x2 = B.x - (W / 2) * dir;
+    return A.y === B.y ? `M${x1} ${A.y} L${x2} ${B.y}` : `M${x1} ${A.y} C ${x1 + 34 * dir} ${A.y}, ${x2 - 34 * dir} ${B.y}, ${x2} ${B.y}`;
+  };
+  const period = ORDER.length * 0.5 + 1.5;
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${width} ${height}`} className="mx-auto h-auto w-full min-w-[760px] max-w-[1080px] text-fg" role="img" aria-label="The finished workflow: START fans out to scan_trends, read_backlog and read_feedback, then join_research, propose_directions, direction_gate, persist_direction, policy_check routing OK to scripter and BLOCK to quarantine, render_desk, store_video.">
+        <defs>
+          <marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0L10 5 0 10z" fill="#7b8794" />
+          </marker>
+        </defs>
+        {EDGES.map((e) => {
+          const A = pos.get(e.from)!;
+          const B = pos.get(e.to)!;
+          const label = e.route ?? (e.from === "quarantine" ? "cleaned" : "");
+          const vertical = A.x === B.x;
+          return (
+            <g key={`${e.from}-${e.to}`}>
+              <path d={path(e.from, e.to)} fill="none" stroke={e.route === "BLOCK" ? COLORS.red : e.route === "OK" ? COLORS.green : "currentColor"} strokeOpacity={e.route ? 0.9 : 0.45} strokeWidth="1.3" strokeDasharray={e.from === "quarantine" ? "5 4" : undefined} markerEnd="url(#ov-arrow)" />
+              {label && (
+                <text x={(A.x + B.x) / 2 + (vertical ? 10 : 0)} y={(A.y + B.y) / 2 + (vertical ? 12 : -7)} fontSize="10" style={mono} fill={label === "BLOCK" ? COLORS.red : label === "OK" ? COLORS.green : COLORS.purple} textAnchor={vertical ? "start" : "middle"}>
+                  {label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        {NODES.map((n) => {
+          const p = pos.get(n.name)!;
+          const color = KIND_COLOR[n.kind];
+          const idx = ORDER.indexOf(n.name);
+          if (n.kind === "start") {
+            return (
+              <g key={n.name}>
+                <circle cx={p.x} cy={p.y} r={15} fill="var(--overlay)" stroke="currentColor" strokeOpacity="0.6" />
+                <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="10" style={mono} fill="currentColor">START</text>
+              </g>
+            );
+          }
+          return (
+            <g key={n.name} transform={`translate(${p.x - W / 2} ${p.y - H / 2})`}>
+              {idx >= 0 && (
+                <motion.rect x={-5} y={-5} width={W + 10} height={H + 10} rx={13} fill="none" stroke={color === "currentColor" ? COLORS.cyan : color} strokeWidth={5} initial={{ opacity: 0 }} animate={{ opacity: [0, 0.5, 0] }} transition={{ duration: 1.0, delay: idx * 0.5, repeat: Infinity, repeatDelay: period - 1.0 }} />
+              )}
+              <rect width={W} height={H} rx={9} fill={n.kind === "function" ? "var(--overlay)" : tint(color, 0.08)} stroke={color === "currentColor" ? "var(--hairline)" : color} strokeWidth="1.2" />
+              <text x={W / 2} y={21} textAnchor="middle" fontSize="12.5" style={mono} fill={color === "currentColor" ? "currentColor" : color}>{n.name}</text>
+              <text x={W / 2} y={labelAbove.has(n.name) ? -8 : H + 13} textAnchor="middle" fontSize="9.5" style={mono} fill="currentColor" opacity="0.6">
+                {KIND_LABEL[n.kind]}{n.step ? ` · ${n.step}` : ""}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+const YOU = ["Type the video idea.", "Pick one of four directions.", "Publish the clip when it lands."];
 const AUTO = [
-  "Four research readers run in parallel and join.",
-  "An agent proposes three typed candidates.",
-  "A policy function routes OK or BLOCK before any spend.",
-  "An agent writes the script.",
-  "Three Veo shots and the thumbnail are generated.",
-  "The finish worker delivers each result by call id.",
-  "An eval gate checks the script, then the video is published.",
+  "Three research readers run in parallel and join: trends, the backlog, the audience's comments.",
+  "An agent proposes four typed candidates, with Memory Bank in its context.",
+  "A policy function routes OK or BLOCK before any spend; a task agent repairs a blocked one.",
+  "An agent writes the script and remembers your pick.",
+  "render_desk, an agent node, submits one Veo clip and the run suspends on the receipt.",
+  "The delivery answers the receipt by call id and the run ends with a clip.",
 ];
 
-const LAPS = [
-  { n: 1, starts: "Your typed idea", gains: "A published video and audience data" },
-  { n: 2, starts: "An idea pre-filled from user:prefs, plus BigQuery readings", gains: "Candidates that cite graph#N" },
-  { n: 3, starts: "The above, plus a rule retrieved from Memory Bank", gains: "A script that follows what the audience taught" },
+const LEGEND: { kind: Kind; label: string }[] = [
+  { kind: "function", label: "function node" },
+  { kind: "join", label: "join" },
+  { kind: "agent", label: "agent as a node" },
+  { kind: "human", label: "your decision (RequestInput)" },
+  { kind: "router", label: "router" },
+  { kind: "task", label: "agent (mode: task)" },
+  { kind: "desk", label: "long-running tool" },
 ];
 
 export function Overview() {
@@ -66,49 +205,21 @@ export function Overview() {
         kicker="Step 2 · What you build today"
         color={COLORS.purple}
         title="A production pipeline as an explicit graph."
-        blurb="One ADK Workflow does the research and the decisions. A plain agent holds the long waits. Your code decides when a run is finished."
+        blurb="One ADK Workflow does the research, the decisions, and the render. It pauses for your pick and for the clip, and resumes from the session. In step 9 an app drives it and ships to Cloud Run."
       />
 
-      {/* Pipeline strip */}
+      {/* The graph, drawn the way the app draws it */}
       <In delay={0.15}>
-        <div className="overflow-x-auto rounded-3xl border border-hairline bg-card p-5 shadow-2xl">
-          <div className="flex min-w-max items-center gap-2">
-            {PIPELINE.map((col, ci) => (
-              <Fragment key={ci}>
-                {ci > 0 && <span className="px-1 text-fg-muted/40">→</span>}
-                <div className="flex flex-col gap-1.5">
-                  {col.map((n, ni) => {
-                    const s = KIND_STYLE[n.kind];
-                    return (
-                      <motion.div
-                        key={n.name}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.25 + ci * 0.07 + ni * 0.04 }}
-                        className="rounded-xl px-3 py-2"
-                        style={{
-                          border: `1.5px ${s.dashed ? "dashed" : "solid"} ${s.border}`,
-                          background: s.bg,
-                          ...(n.kind === "router" ? { clipPath: undefined } : {}),
-                        }}
-                      >
-                        <div className="font-mono text-[12px] font-medium" style={{ color: s.text }}>
-                          {n.name}
-                        </div>
-                        <div className="text-[10px] text-fg-muted">{n.sub}</div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </Fragment>
+        <div className="rounded-3xl border border-hairline bg-card p-5 shadow-2xl">
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The workflow you finish with · each node names the step that adds it</p>
+          <SnakeGraph />
+          <div className="mt-2 flex flex-wrap gap-4 font-mono text-[10px] text-fg-muted">
+            {LEGEND.map((l) => (
+              <span key={l.kind} className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-3 w-5 rounded" style={{ border: `1.5px solid ${KIND_COLOR[l.kind] === "currentColor" ? "var(--hairline)" : KIND_COLOR[l.kind]}`, background: l.kind === "function" ? "var(--overlay)" : tint(KIND_COLOR[l.kind], 0.08) }} />
+                {l.label}
+              </span>
             ))}
-          </div>
-          <div className="mt-4 flex flex-wrap gap-4 font-mono text-[10px] text-fg-muted">
-            <Legend kind="agent" label="Agent as a node" />
-            <Legend kind="human" label="human decision" />
-            <Legend kind="router" label="deterministic router" />
-            <Legend kind="desk" label="long-running tool (outside the graph)" />
-            <Legend kind="later" label="connected in a later step" />
           </div>
         </div>
       </In>
@@ -143,65 +254,24 @@ export function Overview() {
         </div>
       </In>
 
-      {/* Three laps */}
-      <In delay={0.5}>
-        <div className="rounded-3xl border border-hairline bg-card p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">Three videos, one graph</p>
-          <p className="mt-2 max-w-2xl text-sm text-fg-muted">
-            The edge list changes by two lines across the lab. What changes between videos is the state each run starts with.
-          </p>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {LAPS.map((l) => (
-              <div key={l.n} className="rounded-2xl border border-hairline bg-overlay p-4">
-                <div className="font-mono text-xs text-vibe-purple">Lap {l.n}</div>
-                <div className="mt-2 text-[11px] uppercase tracking-wider text-fg-muted">Starts with</div>
-                <div className="text-sm">{l.starts}</div>
-                <div className="mt-3 text-[11px] uppercase tracking-wider text-fg-muted">Produces</div>
-                <div className="text-sm">{l.gains}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </In>
-
       {/* Step list */}
       <In delay={0.65}>
         <div className="grid gap-3 md:grid-cols-3">
           {labSteps.map((s, i) => (
-            <Link
-              key={s.slug}
-              to={`/step/${s.slug}`}
-              className="group rounded-2xl border border-hairline bg-card p-4 transition-all hover:-translate-y-1 hover:bg-card-hover"
-            >
+            <Link key={s.slug} to={`/step/${s.slug}`} className="group rounded-2xl border border-hairline bg-card p-4 transition-all hover:-translate-y-1 hover:bg-card-hover">
               <div className="flex items-center gap-2">
-                <span
-                  className="flex h-7 w-7 items-center justify-center rounded-full font-mono text-[11px] font-bold text-black"
-                  style={{ background: s.color }}
-                >
+                <span className="flex h-7 w-7 items-center justify-center rounded-full font-mono text-[11px] font-bold text-black" style={{ background: s.color }}>
                   {i + 3}
                 </span>
                 <span className="text-sm font-semibold group-hover:text-fg">{s.label}</span>
               </div>
               <div className="mt-2 font-mono text-[10px] text-fg-muted">
-                {i < 4 ? "Part 1 · Workflow graph design" : "Part 2 · State and persistent memory"}
+                {i < 3 ? "Part 1 · Workflow graph design" : i < 7 ? "Part 2 · Memory, knowledge, and the world" : "Wrap-up"}
               </div>
             </Link>
           ))}
         </div>
       </In>
     </div>
-  );
-}
-
-function Legend({ kind, label }: { kind: Kind; label: string }) {
-  const s = KIND_STYLE[kind];
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className="inline-block h-3 w-5 rounded"
-        style={{ border: `1.5px ${s.dashed ? "dashed" : "solid"} ${s.border}`, background: s.bg }}
-      />
-      {label}
-    </span>
   );
 }

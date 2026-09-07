@@ -6,7 +6,7 @@
 # ~/project_id.txt. It leaves you with:
 #   • uv installed, a .venv, and exactly what uv.lock pins inside it
 #   • the two APIs this lab actually calls, enabled on that project
-#   • a .env that sends every model call to Vertex AI with your own creds
+#   • a .env that sends every model call to GEAP with your own creds
 #   • one real Gemini call, proven, before any chapter depends on it
 #
 # It asks exactly two questions — the room's event code and the name the room
@@ -97,9 +97,8 @@ fi
 
 gcloud config set project "$PROJECT" -q >/dev/null 2>&1 || true
 
-# Two APIs, and nothing else. aiplatform serves three of this lab's calls
-# (Gemini, Veo, and the Memory Bank that the Memory Bank step connects); bigquery serves
-# the world graph the BigQuery step builds. Anything else would be enabling a
+# One API, and nothing else: aiplatform serves every cloud call this lab makes
+# (Gemini, Veo, Memory Bank, RAG Engine). Anything else would be enabling a
 # product this lab never touches.
 enable_api() {
     local api="$1" what="$2"
@@ -114,8 +113,7 @@ enable_api() {
         "  ./setup_codelab.sh"
     tick "$api  ($what)"
 }
-enable_api aiplatform.googleapis.com "Gemini · Veo · Memory Bank"
-enable_api bigquery.googleapis.com   "the world graph"
+enable_api aiplatform.googleapis.com "Gemini · Veo · Memory Bank · RAG Engine"
 
 # ── 3 · the room — the only two questions in either script ──────────────────
 say "2 · The room"
@@ -157,8 +155,8 @@ if [ -z "$NAME_DEFAULT" ]; then
 fi
 
 info "press Enter to take the [default] — both answers live in .env, editable later"
-VIBETUBE_EVENT="$(ask 'Room event code' "$EVENT_DEFAULT")"
-VIBETUBE_NAME="$(ask 'Name the room credits you by' "$NAME_DEFAULT")"
+VIBETUBE_EVENT="$(ask 'vibetube.dev event code' "$EVENT_DEFAULT")"
+VIBETUBE_NAME="$(ask 'Name you publish under' "$NAME_DEFAULT")"
 tick "room: $VIBETUBE_EVENT · credited as \"$VIBETUBE_NAME\""
 
 # ── 4 · .env, written whole ─────────────────────────────────────────────────
@@ -246,7 +244,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv(".env", override=True)
-# Same rule as agent/config.py: STUDIO_VERTEX=1 means "Vertex AI via ADC".
+# Same rule as agent/config.py: STUDIO_VERTEX=1 means "GEAP via ADC".
 if os.environ.get("STUDIO_VERTEX", "").lower() in ("1", "true"):
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
     os.environ.pop("GOOGLE_API_KEY", None)

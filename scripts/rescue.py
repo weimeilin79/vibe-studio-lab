@@ -1,8 +1,7 @@
 """Stuck? Fill ONE hole with its solution and move on.
 Run: python scripts/rescue.py <hole|section>
        python scripts/rescue.py            (no args = fill every hole)
-Holes: RESUME · EDGES · TASK_WORD · CREATIVE_GATE · JOIN_CONDITION · PREFS ·
-EDGE_TABLE · GENERATE · RECALL   Sections: s1 · s2 · s3 · s4 · s5
+Holes and sections: see checks/holes.py (HOLES and SECTIONS).
 A rescued file is byte-identical to a hand-pasted one (checks/verify_holes.py
 guards that)."""
 import pathlib

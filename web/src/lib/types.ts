@@ -15,34 +15,6 @@ export type StageStatus =
   | "stall"
   | "wait";
 
-export interface StageRow {
-  key: string;
-  label: string;
-  sub: string;
-  status: StageStatus;
-  note: string;
-}
-
-export interface Candidate {
-  title: string;
-  angle: string;
-  hook: string;
-  evidence: { source: string; note?: string }[];
-}
-
-export interface GraphEdge {
-  from: string;
-  to: string;
-  route: string | null;
-}
-
-export type NodeState = "idle" | "now" | "done" | "you";
-
-export interface GraphView {
-  edges: GraphEdge[];
-  nodes: Record<string, NodeState>;
-}
-
 export interface WorkerExit {
   verb: string;
   code: number;
@@ -50,24 +22,9 @@ export interface WorkerExit {
 }
 
 export interface RunSnapshot {
-  run_id: string | null;
-  lap: number | null;
-  /** idle | proposal | form | scripted | blocked | published */
-  phase: string;
   /** Verb of a worker currently running, or null. */
   busy: string | null;
   last_exit: WorkerExit | null;
-  hint: string;
-  suggested_idea: string;
-  candidates: Candidate[];
-  direction: string | null;
-  thumb: { ref: string; generated: boolean; ready: boolean } | null;
-  thumb_pending: boolean;
-  published: { video_id: string; url: string } | null;
-  blocked: { direction: string; hits: string[] } | null;
-  room: Record<string, unknown> | null;
-  stages: StageRow[];
-  graph: GraphView;
   updated_at: number;
 }
 
@@ -90,7 +47,7 @@ export interface Stage0Status {
   latest_session_id: string | null;
   tool_calls: Record<string, number>;
   called_trends: boolean;
-  called_backcatalog: boolean;
+  called_backlog: boolean;
   turns: number;
   last_reply: string;
 }
@@ -105,7 +62,7 @@ export interface Stage1Status {
   nodes_ran: string[];
   readers_ran: boolean;
   joined: boolean;
-  backcatalog_empty: boolean | null;
+  backlog_count: number | null;
   bundle: string;
 }
 
@@ -138,6 +95,8 @@ export interface Stage3Status {
   routes_wired: boolean;
   reroute_wired: boolean;
   scripter_defined: boolean;
+  persist_wired: boolean;
+  state_write_wired: boolean;
   policy_route_wired: boolean;
   quarantine_kind: string | null;
   sessions: number;
@@ -149,4 +108,84 @@ export interface Stage3Status {
   cleaned: { title: string; angle: string; hook: string } | null;
   blocked_message: string;
   script_title: string;
+  direction: string | null;
+  angle: string | null;
+  hook: string | null;
+  constraints: string | null;
+  user_prefs: { last_direction?: string } | null;
+  state_keys: string[];
+}
+
+/** Evidence for step 6: the two memory callbacks in stage4_memory/agent.py, the bank, and the latest run. */
+export interface Stage4Status {
+  bank_connected: boolean;
+  recall_wired: boolean;
+  remember_wired: boolean;
+  recall_kw: string | null;
+  remember_kw: string | null;
+  sessions: number;
+  nodes_ran: string[];
+  proposed_titles: string[];
+  memory_facts: { id: string; topic: string; fact: string; updated: string }[];
+  memory_written: { action: string; id?: string; fact?: string }[];
+  direction: string | null;
+}
+
+export interface MemoryBank {
+  connected: boolean;
+  engine: string | null;
+  memories: { id: string; topic: string; fact: string; updated: string }[];
+  error?: string;
+}
+
+export interface Stage5Status {
+  corpus_connected: boolean;
+  feedback_wired: boolean;
+  edges: string[][];
+  sessions: number;
+  nodes_ran: string[];
+  feedback_ran: boolean;
+  feedback_query: string | null;
+  feedback_passages: string[];
+  feedback_note: string | null;
+  proposed: { title: string; angle: string; sources: string[] }[];
+  cited_feedback: boolean;
+}
+
+export interface RagCorpus {
+  connected: boolean;
+  corpus: string | null;
+  files: { id: string; display_name: string; description: string }[];
+  comments: number;
+  error?: string;
+}
+
+export interface Stage6Status {
+  tool: string | null;
+  tool_wrapped: boolean;
+  deliver_wired: boolean;
+  chain_wired: boolean;
+  sessions: number;
+  nodes_ran: string[];
+  desk_ran: boolean;
+  submitted: { call_id: string; prompt: string; operation: string } | null;
+  pending: { call_id: string; prompt: string; operation: string } | null;
+  delivered: boolean;
+  render_url: string;
+  render_status: string;
+  store_video_ran: boolean;
+  render_file: { status?: string; url?: string; path?: string; prebaked?: boolean; operation?: string; prompt?: string; reason?: string };
+  real_video: boolean;
+}
+
+export interface DeployStatus {
+  running: boolean;
+  last_exit: { code: number; at: number } | null;
+  url: string;
+  service: string;
+  project: string;
+  region: string;
+  at: number | null;
+  gcloud_project: string;
+  app_built: boolean;
 }

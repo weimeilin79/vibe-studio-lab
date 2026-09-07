@@ -1,11 +1,9 @@
 """Vibe Studio: one server, one port.
 
     /                 the React frontend (web/dist), SPA fallback
-    /api/run/...      run state, SSE stream, the buttons   (server/api/run.py)
     /api/code/...     read/write the lab's editable files   (server/api/code.py)
-    /api/lab/...      evidence checks for the hands-on steps (server/api/lab.py)
-    /api/publish ...  the Wall API the pipeline publishes to (server/api/wall.py)
-    /static/...       generated media: thumbnails, renders, art
+    /api/lab/...      evidence checks, the SSE stream, the console workers (server/api/lab.py)
+    /static/...       generated media: renders, art
     /inspector/...    the ADK dev UI and API, mounted with url_prefix
 
 Run:  uvicorn server.main:app --port 4600
@@ -26,9 +24,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from agent import config  # noqa: E402
-from server.api import code, lab, run, wall  # noqa: E402
-from server.services import run_state  # noqa: E402
-from server.services.events import watcher  # noqa: E402
+from server.api import code, lab  # noqa: E402
+from server.services.events import snapshot, watcher  # noqa: E402
 from server.services.workers import workers  # noqa: E402
 
 DIST = ROOT / "web" / "dist"
@@ -65,8 +62,7 @@ def create_app() -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
-        wall.init()
-        task = asyncio.create_task(watcher(run_state.snapshot))
+        task = asyncio.create_task(watcher(snapshot))
         # Starlette does not run a mounted app's lifespan; run the inspector's
         # explicitly so its own startup/shutdown hooks fire.
         async with inspector.router.lifespan_context(inspector):
@@ -77,9 +73,7 @@ def create_app() -> FastAPI:
                 await workers.stop_all()
 
     app = FastAPI(title="Vibe Studio", lifespan=lifespan)
-    app.include_router(run.router)
     app.include_router(code.router)
-    app.include_router(wall.router)
     app.include_router(lab.router)
     app.mount("/inspector", inspector)
     MEDIA.mkdir(parents=True, exist_ok=True)

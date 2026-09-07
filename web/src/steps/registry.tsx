@@ -1,11 +1,15 @@
 import type { ReactNode } from "react";
-import { StubScene } from "../components/shared";
 import { COLORS } from "./colors";
 import { Story } from "./Story";
 import { Overview } from "./Overview";
 import { SinglePrompt } from "./SinglePrompt";
 import { FanOut } from "./FanOut";
 import { PolicyGate } from "./PolicyGate";
+import { Memory } from "./Memory";
+import { Rag } from "./Rag";
+import { Video } from "./Video";
+import { Deploy } from "./Deploy";
+import { Summary } from "./Summary";
 
 export { COLORS };
 
@@ -63,56 +67,51 @@ export const STEPS: Step[] = [
     color: COLORS.red,
     element: <PolicyGate />,
     parts: [
-      { id: "a", label: "The router node" },
-      { id: "b", label: "Agent modes and the task node" },
+      { id: "a", label: "State" },
+      { id: "b", label: "The router node" },
+      { id: "c", label: "Agent modes and the task node" },
     ],
   },
   {
-    slug: "run-publish",
-    label: "Approve and publish",
-    color: COLORS.green,
-    element: (
-      <StubScene
-        kicker="Step 6 · Long-running tools"
-        title="Approve the thumbnail and publish"
-        blurb="Pending receipts, resuming by call id, and the two-line join condition."
-      />
-    ),
-  },
-  {
-    slug: "bigquery",
-    label: "Audience graph",
-    color: COLORS.blue,
-    element: (
-      <StubScene
-        kicker="Step 7 · BigQuery"
-        title="The audience graph in BigQuery"
-        blurb="Declare a property graph over existing tables and connect read_graph with one edge."
-      />
-    ),
-  },
-  {
-    slug: "session-state",
-    label: "Session state",
-    color: COLORS.cyan,
-    element: (
-      <StubScene
-        kicker="Step 8 · State"
-        title="Session state and the user: prefix"
-        blurb="Restart the server, read a preference from a new session."
-      />
-    ),
-  },
-  {
-    slug: "memory-bank",
+    slug: "memory",
     label: "Memory Bank",
     color: COLORS.purple,
-    element: (
-      <StubScene
-        kicker="Step 9 · Memory"
-        title="Memory Bank: connect, write, read"
-        blurb="Create a bank, write distilled notes, and connect read_memory with one edge."
-      />
-    ),
+    element: <Memory />,
+    parts: [
+      { id: "a", label: "Memory Bank" },
+      { id: "b", label: "Callbacks" },
+    ],
+  },
+  {
+    slug: "rag",
+    label: "RAG Engine",
+    color: COLORS.cyan,
+    element: <Rag />,
+    parts: [
+      { id: "a", label: "RAG Engine" },
+      { id: "b", label: "The third reader" },
+    ],
+  },
+  {
+    slug: "video",
+    label: "The video",
+    color: COLORS.amber,
+    element: <Video />,
+    parts: [
+      { id: "a", label: "A long-running tool" },
+      { id: "b", label: "render_desk in the graph" },
+    ],
+  },
+  {
+    slug: "deploy",
+    label: "Deploy",
+    color: COLORS.green,
+    element: <Deploy />,
+  },
+  {
+    slug: "summary",
+    label: "Summary",
+    color: COLORS.purple,
+    element: <Summary />,
   },
 ];

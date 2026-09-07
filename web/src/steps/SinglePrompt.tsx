@@ -4,10 +4,11 @@ import { motion } from "framer-motion";
 import { ArrowRight, Check, Copy, ExternalLink, Lightbulb, RefreshCw, TerminalSquare, X } from "lucide-react";
 import { CodeEditor } from "../components/CodeEditor";
 import { In, StepHeader } from "../components/shared";
+import { LoadCheck } from "../components/LoadCheck";
 import { api, useRunEvents } from "../lib/api";
 import type { InspectorStatus, Stage0Status } from "../lib/types";
 import { AdkGlance } from "./AdkGlance";
-import { COLORS } from "./colors";
+import { COLORS, tint } from "./colors";
 
 /*
  * Step 3, in three parts:
@@ -75,7 +76,7 @@ export function SinglePrompt() {
 
 const JOBS = [
   "check what is trending",
-  "look at your back catalog",
+  "look at your backlog of ideas",
   "propose a direction and agree on it with the creator",
   "refuse blacklisted subjects (competitor, hateful, gore)",
   "describe the video: a title and 3 shots",
@@ -91,7 +92,7 @@ root_agent = Agent(
     instruction=(                                # instruction: the pipeline as prose
         "You run the creator's short-video channel, alone.\\n"
         "When the creator gives you an idea (or nothing), do ALL of this:\\n"
-        "check what is trending. look at your back catalog. propose a "
+        "check what is trending. look at your backlog of ideas. propose a "
         "direction and agree on it with the creator. refuse blacklisted "
         "subjects (competitor, hateful, gore). then describe the video you "
         "would make: a title (<=60 chars) and 3 shots, one visual sentence "
@@ -148,8 +149,8 @@ function TheAgent() {
               is text. Nothing in the code enforces it.
             </p>
             <p className="mt-4 text-sm text-fg-muted">
-              <b className="text-fg">tools</b> is empty. The first two jobs need data the model does not have, so the agent can only guess at trends and invent a back catalog. In 3c you give it the two functions
-              that fetch the real data.
+              <b className="text-fg">tools</b> is empty. The first two jobs need data the model does not have, so the agent can only guess at trends and invent a backlog. In 3c you give it the two functions
+              that fetch the real data. Both sources are below.
             </p>
           </div>
 
@@ -163,21 +164,96 @@ function TheAgent() {
           </div>
         </section>
       </In>
+
+      <In delay={0.3}>
+        <Sources />
+      </In>
     </div>
+  );
+}
+
+/** The two research sources the whole lab reads: the creator's backlog and
+ *  what is trending. Live from this server, so what you see is what the
+ *  agent will get. */
+function Sources() {
+  const [backlog, setBacklog] = useState<string[] | null>(null);
+  const [trends, setTrends] = useState<{ topic: string; heat: number }[] | null>(null);
+  const loadTrends = useCallback(async () => {
+    try {
+      const r = await fetch("/api/lab/trends");
+      setTrends(((await r.json()) as { trends: { topic: string; heat: number }[] }).trends);
+    } catch {
+      setTrends([]);
+    }
+  }, []);
+  useEffect(() => {
+    api.getCode("agent/backlog.txt").then((f) => setBacklog(f.content.split("\n").filter((l: string) => l.trim() && !l.startsWith("#")))).catch(() => setBacklog([]));
+    loadTrends();
+  }, [loadTrends]);
+  return (
+    <section className="rounded-3xl border border-hairline bg-card p-6">
+      <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The two sources</p>
+      <h2 className="font-display mt-2 text-2xl">The backlog, and what is trending.</h2>
+      <p className="mt-2 max-w-3xl text-sm text-fg-muted">
+        The creator keeps a backlog: ideas noted down to make someday, one per line in{" "}
+        <code className="font-mono text-fg">agent/backlog.txt</code>. The platform reports what is trending: ten formats at a time, a style or a twist an idea can ride,
+        drawn from a pool of 250, each with a heat score, a different ten on every call. The job of the pipeline is to combine
+        the two: find the backlog ideas closest to what the creator wants tonight, and ride the trend that fits them.
+      </p>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
+          <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/backlog.txt · the creator's notes</div>
+          <ol className="max-h-80 overflow-auto px-4 py-3 text-sm">
+            {(backlog ?? []).map((n, i) => (
+              <li key={n} className="flex gap-3 py-1">
+                <span className="w-5 shrink-0 text-right font-mono text-[10px] text-fg-muted">{i + 1}</span>
+                <span>{n}</span>
+              </li>
+            ))}
+            {backlog === null && <li className="text-fg-muted">…</li>}
+          </ol>
+        </div>
+        <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
+          <div className="flex items-center justify-between border-b border-hairline px-4 py-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">GET /api/lab/trends · ten right now</span>
+            <button onClick={loadTrends} className="font-mono text-[11px] text-fg-muted hover:text-fg">
+              another ten
+            </button>
+          </div>
+          <ol className="max-h-80 overflow-auto px-4 py-3 text-sm">
+            {(trends ?? []).map((t) => (
+              <li key={t.topic} className="flex items-center gap-3 py-1">
+                <span className="w-7 shrink-0 rounded px-1 text-center font-mono text-[10px]" style={{ background: tint(AMBER, 0.13), color: AMBER }}>
+                  {t.heat}
+                </span>
+                <span>{t.topic}</span>
+              </li>
+            ))}
+            {trends === null && <li className="text-fg-muted">…</li>}
+          </ol>
+        </div>
+      </div>
+    </section>
   );
 }
 
 /* ───────────────────────── 3c ───────────────────────── */
 
-const CODE_PLATFORM = `# world/platform.py
-def trends() -> list[dict]:
-    r = httpx.get(f"{config.STUDIO_URL}/api/trends", timeout=10)   # this server
-    return r.json()["trends"]            # falls back to SEED_TRENDS if unreachable
+const CODE_PLATFORM = `# agent/trends.py
+FORMATS = [ "one continuous take, no cuts", "a heist for something worthless", ... ]   # fifty
+LOWPOLY_LOOKS = [ "cozy low-poly faceted 3D, warm pastels ...", ... ]                  # the channel's own look
+OTHER_LOOKS = [ "claymation with visible thumbprints ...", "1990s VHS home video ...", ... ]
+TREND_POOL = [f"{fmt} · look: {_look(i, j)}" for i, fmt in enumerate(FORMATS) for j in range(5)]   # 250
 
-def outcomes(creator_id: str) -> list[dict]:
-    r = httpx.get(f"{config.STUDIO_URL}/api/outcomes",
-                  params={"creator_id": creator_id}, timeout=10)
-    return r.json()["videos"]            # rows from runs/wall.db; [] before a publish`;
+def sample_trends(n=10) -> list[dict]:
+    picks = random.sample(TREND_POOL, n)          # a different ten every call
+    heats = sorted(random.sample(range(40, 100), n), reverse=True)
+    return [{"topic": t, "heat": h} for t, h in zip(picks, heats)]
+
+# agent/graph.py
+def backlog_notes() -> list[str]:
+    return [l.strip() for l in BACKLOG_FILE.read_text().splitlines()
+            if l.strip() and not l.startswith("#")]      # agent/backlog.txt`;
 
 const DEFAULT_IDEA = "a tiny robot doing laundry at midnight";
 const INSPECTOR_URL = "/inspector/dev-ui/?app=stage0_prompt";
@@ -189,7 +265,6 @@ function ToolsEditRun() {
   const [inspector, setInspector] = useState<InspectorStatus | null>(null);
   const [status, setStatus] = useState<Stage0Status | null>(null);
   const [checking, setChecking] = useState(false);
-  const [stopped, setStopped] = useState<{ drivers_stopped: string[]; adk_processes_stopped: string[] } | null>(null);
   const { snapshot } = useRunEvents();
 
   const check = useCallback(async () => {
@@ -251,42 +326,41 @@ function ToolsEditRun() {
             <FlowBox color={PURPLE} title="the tools" sub="stage0_prompt/agent.py">
               <b>check_trends()</b>
               <br />
-              <b>read_back_catalog()</b>
+              <b>read_backlog()</b>
               <br />
               plain Python, no model
             </FlowBox>
             <Arrow label="Python call" />
-            <FlowBox color={BLUE} title="platform client" sub="world/platform.py">
-              <b>trends()</b> and <b>outcomes(creator_id)</b>
+            <FlowBox color={BLUE} title="the sources" sub="agent/trends.py · agent/backlog.txt">
+              <b>sample_trends()</b>: ten of 250, a format and a look each
               <br />
-              httpx GET to <b>STUDIO_URL</b>
+              <b>backlog_notes()</b>: reads the notes file
             </FlowBox>
-            <Arrow label="HTTP GET" />
-            <FlowBox color={GREEN} title="the Wall API" sub="this server · server/api/wall.py">
-              <b>/api/trends</b> → the seed trend list
+            <Arrow label="returns" />
+            <FlowBox color={GREEN} title="the data" sub="beside the graph, no network">
+              ten trends with a heat score, hottest first
               <br />
-              <b>/api/outcomes</b> → rows in runs/wall.db
-              <br />
-              (empty until your first publish)
+              fifteen backlog notes, one per line
             </FlowBox>
           </div>
 
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
             <div className="overflow-hidden rounded-2xl border border-hairline">
-              <div className="border-b border-hairline bg-overlay px-4 py-2 font-mono text-[11px] text-fg-muted">world/platform.py</div>
+              <div className="border-b border-hairline bg-overlay px-4 py-2 font-mono text-[11px] text-fg-muted">agent/trends.py · agent/graph.py</div>
               <pre className="overflow-x-auto px-4 py-3 font-mono text-[11.5px] leading-relaxed text-fg">
                 <code>{CODE_PLATFORM}</code>
               </pre>
             </div>
             <ul className="space-y-3 text-sm text-fg-muted">
               <li>
-                <b className="text-fg">Trends</b> come from the platform, the way a channel would ask the video site.
-                Here the platform is the Wall API this server hosts, and the list is a fixed seed with a heat score per
-                topic.
+                <b className="text-fg">Trends</b> are what is moving on the platform right now: a format paired with a look, never a
+                subject. The pool beside the graph holds 250; every call draws ten with a heat score, so no two runs see the same
+                ten. A quarter of the looks are the channel's own cozy low-poly; the rest range from claymation to film noir.
               </li>
               <li>
-                <b className="text-fg">The back catalog</b> is the channel's own published videos with their retention
-                numbers, read from runs/wall.db. It is empty now and fills after step 6 publishes the first video.
+                <b className="text-fg">The backlog</b> is the creator's own notes, fifteen ideas in{" "}
+                <code className="font-mono text-fg">agent/backlog.txt</code>, one per line. Add a line and the next call
+                returns it.
               </li>
               <li>
                 <b className="text-fg">The same two sources</b> feed the graph in step 4. Only the shape changes: there
@@ -299,7 +373,7 @@ function ToolsEditRun() {
 
       {/* the edit */}
       <In delay={0.2}>
-        <section className="rounded-3xl border p-6" style={{ borderColor: `${AMBER}66`, background: `${AMBER}0a` }}>
+        <section className="rounded-3xl border p-6" style={{ borderColor: tint(AMBER, 0.4), background: tint(AMBER, 0.04) }}>
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: AMBER }}>
@@ -314,7 +388,7 @@ function ToolsEditRun() {
             <div className="flex items-center gap-2">
               <span
                 className="rounded-full border px-3 py-1 font-mono text-[11px]"
-                style={wired ? { borderColor: `${GREEN}66`, color: GREEN, background: `${GREEN}14` } : { borderColor: "var(--hairline)", color: "var(--fg-muted)" }}
+                style={wired ? { borderColor: tint(GREEN, 0.4), color: GREEN, background: tint(GREEN, 0.08) } : { borderColor: "var(--hairline)", color: "var(--fg-muted)" }}
               >
                 {status ? (wired ? "tools wired ✓" : `wired: ${status.tools_wired.length ? status.tools_wired.join(", ") : "none"}`) : "…"}
               </span>
@@ -337,7 +411,7 @@ function ToolsEditRun() {
               {hint >= 2 && (
                 <p className="mt-2">
                   <b className="text-fg">Hint 2.</b> The finished line is{" "}
-                  <code className="rounded bg-overlay px-1.5 py-0.5 font-mono text-fg">tools=[check_trends, read_back_catalog],</code>{" "}
+                  <code className="rounded bg-overlay px-1.5 py-0.5 font-mono text-fg">tools=[check_trends, read_backlog],</code>{" "}
                   and the TODO comment can go.
                 </p>
               )}
@@ -350,9 +424,13 @@ function ToolsEditRun() {
         </section>
       </In>
 
+      <In delay={0.25}>
+        <LoadCheck app="stage0_prompt" intro="Save the tools edit, then click the button. It loads stage0_prompt the way adk web will and tells you either that it loads or what ADK objects to." />
+      </In>
+
       {/* run it */}
       <In delay={0.3}>
-        <section className="rounded-3xl border p-6" style={{ borderColor: `${BLUE}55`, background: `${BLUE}0a` }}>
+        <section className="rounded-3xl border p-6" style={{ borderColor: tint(BLUE, 0.33), background: tint(BLUE, 0.04) }}>
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: BLUE }}>
@@ -436,7 +514,7 @@ function ToolsEditRun() {
 
           <ul className="mt-5 grid gap-2 md:grid-cols-2">
             <CheckRow ok={wired} label="Both tools are in the file">
-              {status ? (wired ? "tools=[check_trends, read_back_catalog]" : "Edit the highlighted line above and save.") : "…"}
+              {status ? (wired ? "tools=[check_trends, read_backlog]" : "Edit the highlighted line above and save.") : "…"}
             </CheckRow>
             <CheckRow ok={!!status && status.sessions > 0} label="The agent ran">
               {status ? `${status.sessions} session${status.sessions === 1 ? "" : "s"}, ${status.turns} message${status.turns === 1 ? "" : "s"} from you` : "…"}
@@ -444,8 +522,8 @@ function ToolsEditRun() {
             <CheckRow ok={!!status?.called_trends} label="check_trends was called">
               {status ? `${status.tool_calls.check_trends ?? 0} call${(status.tool_calls.check_trends ?? 0) === 1 ? "" : "s"} · GET /api/trends` : "…"}
             </CheckRow>
-            <CheckRow ok={!!status?.called_backcatalog} label="read_back_catalog was called">
-              {status ? `${status.tool_calls.read_back_catalog ?? 0} call${(status.tool_calls.read_back_catalog ?? 0) === 1 ? "" : "s"} · GET /api/outcomes (empty until a publish)` : "…"}
+            <CheckRow ok={!!status?.called_backlog} label="read_backlog was called">
+              {status ? `${status.tool_calls.read_backlog ?? 0} call${(status.tool_calls.read_backlog ?? 0) === 1 ? "" : "s"} · reads agent/backlog.txt, 15 notes` : "…"}
             </CheckRow>
           </ul>
 
@@ -467,44 +545,6 @@ function ToolsEditRun() {
         </section>
       </In>
 
-      {/* wrap up */}
-      <In delay={0.5}>
-        <section className="rounded-3xl border border-hairline bg-card p-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">Before you continue</p>
-              <h2 className="font-display mt-2 text-2xl">Stop adk web.</h2>
-              <p className="mt-2 max-w-2xl text-sm text-fg-muted">
-                This closes the embedded dev UI, stops any driver process this server started, and stops any{" "}
-                <code className="font-mono">adk web</code> or <code className="font-mono">adk api_server</code> you
-                launched from a terminal. Step 4 reopens the dev UI when it needs it.
-              </p>
-            </div>
-            <button
-              onClick={async () => {
-                setOpen(false);
-                setStopped(await api.stopAdk());
-              }}
-              className="flex items-center gap-2 rounded-xl border border-vibe-red/50 bg-vibe-red/10 px-5 py-2.5 text-sm font-bold text-vibe-red transition-colors hover:bg-vibe-red/20"
-            >
-              <X size={16} /> Stop adk web
-            </button>
-          </div>
-          {stopped && (
-            <div className="mt-4 rounded-2xl border border-hairline bg-overlay p-4 font-mono text-xs text-fg-muted">
-              <div>
-                drivers stopped: {stopped.drivers_stopped.length ? stopped.drivers_stopped.join(", ") : "none were running"}
-              </div>
-              <div className="mt-1">
-                adk processes stopped:{" "}
-                {stopped.adk_processes_stopped.length ? stopped.adk_processes_stopped.join(" · ") : "none outside this server"}
-              </div>
-              <div className="mt-1 text-vibe-green">The embedded dev UI is closed. Continue to step 4.</div>
-            </div>
-          )}
-        </section>
-      </In>
-
       <In delay={0.55}>
         <div className="mx-auto max-w-3xl rounded-2xl border border-hairline bg-card/60 px-6 py-5 text-center text-sm text-fg-muted">
           This design works for a one-off demo. It does not give you inspectable research, an enforced pause, or a
@@ -520,7 +560,7 @@ function ToolsEditRun() {
 
 function Chip({ color, children }: { color: string; children: React.ReactNode }) {
   return (
-    <span className="rounded-md px-2 py-1" style={{ background: `${color}1a`, color, border: `1px solid ${color}44` }}>
+    <span className="rounded-md px-2 py-1" style={{ background: tint(color, 0.1), color, border: `1px solid ${tint(color, 0.27)}` }}>
       {children}
     </span>
   );
@@ -528,7 +568,7 @@ function Chip({ color, children }: { color: string; children: React.ReactNode })
 
 function FlowBox({ color, title, sub, children }: { color: string; title: string; sub: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: `${color}66`, background: `${color}0f` }}>
+    <div className="rounded-2xl border p-4" style={{ borderColor: tint(color, 0.4), background: tint(color, 0.06) }}>
       <div className="text-sm font-semibold" style={{ color }}>
         {title}
       </div>
@@ -583,7 +623,7 @@ function CheckRow({ ok, label, tone = "good", children }: { ok: boolean; label: 
   const color = ok ? (tone === "warn" ? AMBER : GREEN) : "var(--fg-muted)";
   return (
     <li className="flex items-start gap-3 rounded-2xl border border-hairline bg-overlay p-3">
-      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border" style={{ borderColor: color, color, background: ok ? `${color}1a` : "transparent" }}>
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border" style={{ borderColor: color, color, background: ok ? tint(color, 0.1) : "transparent" }}>
         {ok ? <Check size={13} /> : <X size={12} className="opacity-40" />}
       </span>
       <div>

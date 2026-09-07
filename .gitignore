@@ -8,15 +8,11 @@ __pycache__/
 
 # everything the lab GENERATES at runtime (each student makes their own)
 runs/
-app/static/thumbs/
-
-# author-side capture scratch
-codelab-img/src/decor/*-s.png
+app/static/
 
 # local codelab preview build
 .preview/
 app/static/renders/
-app/static/avatars/
 
 # local claat build of CODELAB.md
 build/
@@ -42,3 +38,8 @@ GEMINI.md
 # frontend build + deps
 web/node_modules/
 web/dist/
+
+# the app (step 9)
+vibestudio/web/node_modules/
+vibestudio/web/dist/
+vibestudio/runs/

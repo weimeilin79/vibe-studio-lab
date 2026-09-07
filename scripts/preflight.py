@@ -41,17 +41,13 @@ if "--ping" in sys.argv:
     except Exception as e:
         tick(f"model ping ({config.MODEL})", False, str(e)[:70])
 
-no_bq, no_mb = os.environ.get("STUDIO_NO_BQ"), os.environ.get("STUDIO_NO_MB")
-if no_bq:
-    print("  - BigQuery: skipped (STUDIO_NO_BQ=1 — graph readings degrade honestly)")
-else:
-    try:
-        from google.cloud import bigquery
-        c = bigquery.Client()
-        tick(f"Google Cloud ADC (project {c.project})", True)
-    except Exception as e:
-        tick("Google Cloud ADC", False,
-             f"gcloud auth application-default login   ({str(e)[:50]})")
+no_mb = os.environ.get("STUDIO_NO_MB")
+try:
+    import google.auth
+    _, adc_project = google.auth.default()
+    tick(f"Google Cloud ADC (project {adc_project})", bool(adc_project))
+except Exception as e:
+    tick("Google Cloud ADC", False, f"gcloud auth application-default login   ({str(e)[:50]})")
 if no_mb:
     print("  - Memory Bank: skipped (STUDIO_NO_MB=1 — notes fall back to empty)")
 else:
@@ -62,8 +58,8 @@ else:
         tick("Memory Bank SDK", False, "uv sync")
 
 # the four stage apps the workflow act grows through - adk web lists them
-for app in ("stage0_prompt", "stage1_fanout", "stage2_direction",
-            "stage3_router"):
+for app in ("stage0_prompt", "stage1_fanout", "stage2_direction", "stage3_router",
+            "stage4_memory", "stage5_rag", "stage6_video"):
     try:
         mod = __import__(f"{app}.agent", fromlist=["root_agent"])
         n = getattr(getattr(mod.root_agent, "graph", None), "edges", None)
@@ -71,29 +67,6 @@ for app in ("stage0_prompt", "stage1_fanout", "stage2_direction",
         tick(label, True)
     except Exception as e:
         tick(f"{app} loads", False, str(e)[:70])
-
-try:
-    import httpx
-    r = httpx.get(f"{config.STUDIO_URL}/api/trends", timeout=3)
-    tick(f"Vibe Studio up at {config.STUDIO_URL}", r.status_code == 200)
-except Exception:
-    # not a failure: the studio is deliberately started in the policy gate step,
-    # right before the first click that needs it
-    print(f"  - Vibe Studio: not running yet (started in the policy gate step)")
-
-# the room: optional. Configured -> reachable is a tick; blank -> local only.
-room_url = os.environ.get("VIBETUBE_URL", "").rstrip("/")
-room_event = os.environ.get("VIBETUBE_EVENT", "").strip()
-if room_url and room_event:
-    try:
-        import httpx
-        r = httpx.get(f"{room_url}/api/events/{room_event}", timeout=5)
-        tick(f"room: connected ({room_event})", r.status_code == 200,
-             f"platform said {r.status_code} — check VIBETUBE_URL/EVENT")
-    except Exception as e:
-        tick(f"room: connected ({room_event})", False, str(e)[:70])
-else:
-    print("  - room: not configured (local only — publishing still works)")
 
 print("\nPREFLIGHT " + ("GREEN" if ok else "NOT READY - fix the ✗ lines above"))
 sys.exit(0 if ok else 1)

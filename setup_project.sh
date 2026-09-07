@@ -88,7 +88,7 @@ BILLING_LIST="$(gcloud billing accounts list \
 
 if [ -z "$BILLING_LIST" ]; then
     die "No open billing account on this Google account." \
-        "This lab calls Gemini on Vertex AI, which needs billing enabled." \
+        "This lab calls Gemini on GEAP, which needs billing enabled." \
         "" \
         "If you were given a Google Cloud credit for this session, claim it" \
         "first — it takes about a minute and creates the billing account for" \

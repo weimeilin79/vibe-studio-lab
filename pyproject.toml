@@ -1,7 +1,7 @@
 [project]
 name = "vibe-studio-lab"
 version = "0.1.0"
-description = "Vibe Studio: Long-Running Workflows & Durable State with ADK"
+description = "VibeStudio - Agentic Workflow with ADK (the learning center)"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "google-adk[db]==2.5.0",

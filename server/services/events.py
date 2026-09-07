@@ -1,4 +1,4 @@
-"""The event bus behind /api/run/events.
+"""The event bus behind /api/lab/events.
 
 Subscribers hold an asyncio.Queue. Anything that changes the run (a worker
 writing a file, a worker starting or exiting) is turned into a fresh snapshot
@@ -19,7 +19,7 @@ from agent import config
 
 WATCHED = [config.STATE, config.RUNS / "sessions.db",
            config.RUNS / "ui_last.json", config.RUNS / "memorybank.json",
-           config.RUNS / "graph_report.json", config.WALL_DB]
+           config.RUNS / "ragcorpus.json", config.RUNS / "deploy.json"]
 POLL_S = 0.5
 HEARTBEAT_S = 15.0
 
@@ -102,3 +102,29 @@ async def watcher(snapshot_fn) -> None:
 
 def sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+async def snapshot():
+    """The light snapshot the lab pages watch."""
+    from ..schemas import RunSnapshot
+    from .workers import workers
+    last = workers.last_exit()
+    return RunSnapshot(busy=workers.busy(), last_exit=last if last and "verb" in last else None,
+                       updated_at=time.time())
+
+
+async def stream():
+    """The SSE generator: a snapshot on connect, then every published event."""
+    q = bus.subscribe()
+    try:
+        snap = await snapshot()
+        yield sse({"type": "snapshot", "data": snap.model_dump(by_alias=True)})
+        while True:
+            try:
+                ev = await asyncio.wait_for(q.get(), timeout=HEARTBEAT_S)
+            except asyncio.TimeoutError:
+                yield ": keep-alive\n\n"
+                continue
+            yield sse(ev)
+    finally:
+        bus.unsubscribe(q)
