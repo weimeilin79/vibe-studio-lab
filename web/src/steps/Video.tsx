@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowRight, Download, RefreshCw } from "lucide-react";
 import { In, StepHeader } from "../components/shared";
 import { CatchUp } from "../components/CatchUp";
 import { api, useRunEvents } from "../lib/api";
@@ -284,7 +284,7 @@ function PollerFigure() {
 
 /* ───────────────────────── 8a ───────────────────────── */
 
-const CODE_VIDEOGEN = `# agent/videogen.py
+const CODE_VIDEOGEN = `# agent/platform/videogen.py
 def start(script, *, retries=RETRIES, interval_s=INTERVAL_S) -> dict:
     """Submit one render. Returns at once with the operation name; that string
     is all a later process needs to find the work again."""
@@ -395,7 +395,7 @@ function TheTool() {
               </pre>
             </div>
             <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
-              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/videogen.py · start and check</div>
+              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/platform/videogen.py · start and check</div>
               <pre className="max-h-80 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
                 <code>{CODE_VIDEOGEN}</code>
               </pre>
@@ -418,7 +418,7 @@ function TheTool() {
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <SourceToggle path="agent/videogen.py" label="agent/videogen.py · Veo, with retries" />
+            <SourceToggle path="agent/platform/videogen.py" label="agent/platform/videogen.py · Veo, with retries" />
             <SourceToggle path="agent/desk.py" label="agent/desk.py · render_desk and its tool" />
           </div>
         </section>
@@ -577,7 +577,7 @@ const VIDEO_COMMANDS: { cmd: VideoCmd; line: string; what: string }[] = [
   { cmd: "deliver", line: "python -m agent.deliver", what: "Takes the newest pending render, polls Veo until the clip exists, writes the result to runs/state.json, and resumes the session with a function_response for the call's id. The graph continues; the nodes it runs print here." },
 ];
 
-function DeliverRunner({ onDone }: { onDone: () => void }) {
+function DeliverRunner({ onDone, onShow }: { onDone: () => void; onShow: () => void }) {
   const [lines, setLines] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [copied, setCopied] = useState<VideoCmd | null>(null);
@@ -620,7 +620,18 @@ function DeliverRunner({ onDone }: { onDone: () => void }) {
   };
   return (
     <>
-      <AnimatePresence>{overlay && <DeliverOverlay lines={lines} running={running} exit={exit} onClose={() => setOverlay(false)} />}</AnimatePresence>
+      {overlay && (
+        <DeliverOverlay
+          lines={lines}
+          running={running}
+          exit={exit}
+          onClose={() => setOverlay(false)}
+          onShow={() => {
+            setOverlay(false);
+            onShow();
+          }}
+        />
+      )}
       <ol className="mt-4 grid gap-3 md:grid-cols-2">
         {VIDEO_COMMANDS.map((c) => (
           <li key={c.cmd} className="rounded-2xl border border-hairline bg-overlay p-4">
@@ -651,6 +662,16 @@ function DeliverRunner({ onDone }: { onDone: () => void }) {
             <span>python -m agent.deliver · output</span>
             <span>{running ? "running…" : exit === 0 ? "done" : exit === null ? "" : `exit ${exit}`}</span>
           </div>
+          {!running && exit === 0 && (
+            <div className="flex flex-col gap-3 border-b border-hairline px-4 py-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-xs text-fg-muted">
+                Delivered. adk web does not re-read a session on its own, so the frame above still shows the run ending at the receipt.
+              </p>
+              <button onClick={onShow} className="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 font-mono text-xs font-bold text-black" style={{ background: AMBER }}>
+                <RefreshCw size={13} /> Refresh adk web
+              </button>
+            </div>
+          )}
           <pre className="max-h-80 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
             {lines.filter((l) => !/Warning|warn\(/.test(l)).join("\n") || (running ? "starting…" : "")}
           </pre>
@@ -662,7 +683,7 @@ function DeliverRunner({ onDone }: { onDone: () => void }) {
 
 /** The delivery, as a modal: find the receipt, wait for Veo, answer by id,
  *  the graph continues. Progress follows the output lines. */
-function DeliverOverlay({ lines, running, exit, onClose }: { lines: string[]; running: boolean; exit: number | null; onClose: () => void }) {
+function DeliverOverlay({ lines, running, exit, onClose, onShow }: { lines: string[]; running: boolean; exit: number | null; onClose: () => void; onShow: () => void }) {
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -688,8 +709,8 @@ function DeliverOverlay({ lines, running, exit, onClose }: { lines: string[]; ru
     { name: "the graph continues", sub: "store_video", color: PURPLE },
   ];
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)" }} role="dialog" aria-modal="true" aria-label="Delivering the render">
-      <motion.div initial={{ y: 16, scale: 0.98 }} animate={{ y: 0, scale: 1 }} exit={{ y: 16, scale: 0.98 }} className="w-full max-w-3xl overflow-hidden rounded-3xl border border-hairline bg-card shadow-2xl">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)" }} role="dialog" aria-modal="true" aria-label="Delivering the render">
+      <motion.div initial={{ y: 16, scale: 0.98 }} animate={{ y: 0, scale: 1 }} className="w-full max-w-3xl overflow-hidden rounded-3xl border border-hairline bg-card shadow-2xl">
         <div className="flex items-center justify-between border-b border-hairline px-5 py-3">
           <div className="flex items-center gap-3">
             {!done && <RefreshCw size={14} className="animate-spin" style={{ color: AMBER }} />}
@@ -729,9 +750,15 @@ function DeliverOverlay({ lines, running, exit, onClose }: { lines: string[]; ru
         </div>
         <div className="flex items-center justify-end gap-3 border-t border-hairline px-5 py-3">
           {!done && <span className="text-xs text-fg-muted">The page is locked until the command finishes.</span>}
-          <button onClick={onClose} disabled={!done} className="rounded-xl px-4 py-2 font-mono text-xs font-bold text-black disabled:opacity-40" style={{ background: AMBER }}>
+          {done && !failed && <span className="text-xs text-fg-muted">adk web still shows the run ending at the receipt until the session is reloaded.</span>}
+          <button onClick={onClose} disabled={!done} className="rounded-xl border border-hairline px-4 py-2 font-mono text-xs font-bold text-fg disabled:opacity-40">
             Close
           </button>
+          {done && !failed && (
+            <button onClick={onShow} className="flex items-center gap-2 rounded-xl px-4 py-2 font-mono text-xs font-bold text-black" style={{ background: AMBER }}>
+              <RefreshCw size={13} /> Refresh adk web
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>
@@ -742,6 +769,16 @@ function TheDesk() {
   const [idea, setIdea] = useState(DEFAULT_VIDEO_IDEA);
   const [hint, setHint] = useState(0);
   const { status, checking, check, open, setOpen } = useStage6();
+  const [frame, setFrame] = useState<{ url: string; n: number } | null>(null);
+  /** Reload the embedded dev UI on the latest session, so the events the
+   *  delivery wrote from another process are on screen. */
+  const showInAdkWeb = useCallback(async () => {
+    const st = await api.labStage6();
+    const sess = st.session;
+    const url = sess ? `/inspector/dev-ui/?app=stage6_video&userId=${encodeURIComponent(sess.user)}&session=${encodeURIComponent(sess.id)}` : `/inspector/dev-ui/?app=stage6_video`;
+    setFrame((f) => ({ url, n: (f?.n ?? 0) + 1 }));
+    setOpen(() => true);
+  }, [setOpen]);
   const wired = status?.chain_wired ?? false;
   const wrapped = status?.tool_wrapped ?? false;
   const pending = status?.pending ?? null;
@@ -814,9 +851,10 @@ function TheDesk() {
           intro={`Send an idea and answer the form. After the scripter, render_desk submits the render and the run ends with the receipt.${status && !status.real_video ? " This server has STUDIO_REAL_VIDEO=0: the receipt is a stand-in that finishes in five seconds, no cost." : status?.real_video ? " This server renders for real: one Veo clip, a minute or three." : ""}`}
           idea={idea}
           setIdea={setIdea}
+          frame={frame}
           steps={[
             "After the scripter, open render_desk's events: a function call to render_submit with the prompt render_desk composed, then its response with status pending and the operation name, then the desk's reply, WAITING. No more events. The State tab has no render_url. The verify panel below shows the same receipt.",
-            "Run the delivery below. When it finishes, adk web does not update the session on its own: select another session and come back to this one, or reload the page. The function_response and store_video then follow the pending call, and the State tab has render_url.",
+            "Run the delivery below. When it finishes, click Refresh adk web: the frame reopens this session, and the function_response and store_video follow the pending call. The State tab has render_url. adk web does not re-read a session on its own; in a separate tab, select another session and come back.",
           ]}
         />
       </In>
@@ -831,7 +869,7 @@ function TheDesk() {
             Each button runs the command shown as a process on this server and streams its output here; the copy button gives you the same line for a terminal
             at the repo root. Nothing about the run is in this server's memory: the command reads the session store, the same file adk web writes.
           </p>
-          <DeliverRunner onDone={check} />
+          <DeliverRunner onDone={check} onShow={showInAdkWeb} />
           <div className="flex flex-wrap gap-3">
             <SourceToggle path="agent/deliver.py" label="agent/deliver.py · find, wait, answer by id" />
           </div>
@@ -860,7 +898,12 @@ function TheDesk() {
           </CheckRow>
           {status?.render_url ? (
             <li className="md:col-span-2 overflow-hidden rounded-2xl border border-hairline bg-overlay">
-              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">{status.render_url}</div>
+              <div className="flex items-center justify-between gap-3 border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
+                <span className="truncate">{status.render_url}</span>
+                <a href={status.render_url} download={status.render_url.split("/").pop() || "render.mp4"} className="flex shrink-0 items-center gap-1.5 rounded-md border border-hairline bg-card px-2.5 py-1 normal-case tracking-normal text-fg hover:border-vibe-amber/60">
+                  <Download size={12} /> Download the clip
+                </a>
+              </div>
               <video src={status.render_url} controls className="max-h-[420px] w-full bg-black" />
             </li>
           ) : null}

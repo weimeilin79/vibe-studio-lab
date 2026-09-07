@@ -7,8 +7,8 @@ import json
 import pathlib
 import re
 
-from .agent import config
-from .agent.graph import BACKLOG_FILE
+from ..agent.platform import config
+from ..agent.graph import BACKLOG_FILE
 
 PROFILE = config.RUNS / "profile.json"
 THUMBS = config.MEDIA / "thumbs"
@@ -49,7 +49,12 @@ DEFAULT_PROFILE = {
     "platform_url": "https://vibetube.dev",
     "event_code": "",
     "avatar_url": "",
+    "project_id": "",
 }
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
 def profile() -> dict:
@@ -63,6 +68,11 @@ def profile() -> dict:
             data.update({k: v for k, v in json.loads(PROFILE.read_text()).items() if k in data})
         except ValueError:
             pass
+    # The platform keeps one video per project and room. The id is stable for a
+    # creator in a room, so publishing again replaces the earlier video instead
+    # of adding one. VIBETUBE_PROJECT overrides it.
+    data["project_id"] = (os.environ.get("VIBETUBE_PROJECT", "")
+                          or f"{_slug(data['display_name']) or 'creator'}-{_slug(data['event_code']) or 'room'}")
     return data
 
 

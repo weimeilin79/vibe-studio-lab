@@ -2,7 +2,7 @@
 
 What viewers wrote under the channel's last videos. Thirty comments, good and
 bad, in no particular order. This file is the RAG Engine corpus for step 7:
-`python -m agent.rag load` uploads it, and `read_feedback` retrieves the
+`python -m agent.platform.rag load` uploads it, and `read_feedback` retrieves the
 passages closest to tonight's idea.
 
 - "My cat judging the new kitchen gadgets" — @mira_k: The slow blink at the air fryer is the funniest thing I have seen all week. More cat, please.

@@ -12,6 +12,8 @@ dependencies = [
     "greenlet>=3.5.5",
     "google-cloud-aiplatform>=1.163.0",
     "pillow>=10.0",
+    "opentelemetry-exporter-otlp-proto-http==1.42.1",
+    "opentelemetry-resourcedetector-gcp>=1.9.0a0,<2",
 ]
 
 [tool.setuptools]

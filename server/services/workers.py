@@ -16,7 +16,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 
-from agent import config
+from agent.platform import config
 
 from .events import bus
 
@@ -66,7 +66,8 @@ class Workers:
                 return False, f"{self.busy()} is still running"
             if verb in self.running():
                 return False, f"{verb} is already running"
-        argv = [sys.executable, "-m", f"agent.{verb}", *args]
+        module = f"agent.platform.{verb}" if verb in ("bank", "rag") else f"agent.{verb}"   # deliver stays in agent/
+        argv = [sys.executable, "-m", module, *args]
         return await self._spawn(verb, argv)
 
 

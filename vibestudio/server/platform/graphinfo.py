@@ -36,7 +36,7 @@ def _kind(node) -> str:
 
 @lru_cache(maxsize=1)
 def describe() -> dict:
-    from .agent.graph import wf
+    from ..agent.graph import wf
     g = wf.graph
     nodes = [{"name": n.name, "kind": _kind(n)} for n in g.nodes]
     edges = [{"from": e.from_node.name, "to": e.to_node.name, "route": e.route} for e in g.edges]

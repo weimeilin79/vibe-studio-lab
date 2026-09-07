@@ -2,17 +2,17 @@
 
 Memory is not a node. propose_directions reads the creator's memories before
 its model call (before_model_callback) and scripter writes what the creator
-picked after its turn (after_agent_callback). Both live in agent/memory.py.
+picked after its turn (after_agent_callback). Both live in agent/platform/memory.py.
 """
 from google.adk import Agent, Workflow
 from google.adk.workflow import START, JoinNode
 
-from agent import config
+from agent.platform import config
 from agent.cleanup_tools import find_policy_hits, suggest_replacement
 from agent.graph import (PROPOSE_INSTRUCTION, QUARANTINE_INSTRUCTION,
                          SCRIPT_INSTRUCTION, direction_gate, persist_direction,
                          policy_check, read_backlog, scan_trends)
-from agent.memory import recall_taste, remember_pick
+from agent.platform.memory import recall_taste, remember_pick
 from agent.schemas import CleanedDirection, Directions, Script
 
 join_research = JoinNode(name="join_research")

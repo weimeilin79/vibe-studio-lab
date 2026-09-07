@@ -18,99 +18,93 @@ const PURPLE = COLORS.purple;
 const RED = COLORS.red;
 const mono = { fontFamily: "var(--font-mono)" } as const;
 
-const RUNNER_POINTS = [
-  { t: "The Runner", d: "adk web was a Runner with a page. A Runner takes an app name, the agent or workflow, and a session service; run_async(user_id, session_id, new_message) yields every event the graph produces and stores them in the session. The app is the same loop with a different page." },
-  { t: "The app's shape", d: "vibestudio/server: a FastAPI process with a bus, a runner, a publisher, an avatar job, and the files. vibestudio/web: a React page. vibestudio/server/agent: the finished agent, byte for byte the lab's solution, so the app works whether or not every hole in the lab is filled." },
-  { t: "One stream", d: "Every change is one event on the bus, and /api/events streams the bus. Each event carries the folded run state after it, so a page that connects late is current from its first message, and the page never reconstructs anything." },
-  { t: "Cloud Run", d: "A container from the Dockerfile, built by Cloud Build, served at one URL. The two resource names travel as env vars; the render poller and the publisher run inside the same process, so one instance with session affinity holds the run." },
-];
+
+const CODE_GCLOUD = `gcloud run deploy vibestudio --source vibestudio \\
+  --project $GOOGLE_CLOUD_PROJECT --region us-central1 \\
+  --labels dev-tutorial-codelab=vibetube --allow-unauthenticated \\
+  --memory 2Gi --cpu 2 --timeout 3600 --concurrency 40 \\
+  --max-instances 1 --min-instances 1 --session-affinity \\
+  --set-env-vars GOOGLE_CLOUD_PROJECT=…,STUDIO_VERTEX=1,STUDIO_MEMORY_BANK=…,STUDIO_RAG_CORPUS=…,VIBETUBE_URL=…,VIBETUBE_EVENT=…,VIBETUBE_NAME=…,VIBETUBE_PROJECT=…`;
 
 const CODE_RUNNER = `# vibestudio/server/runner.py
 self._svc = DatabaseSessionService(db_url=config.DB_URL)
 self._runner = Runner(app_name=config.APP, agent=wf, session_service=self._svc)
 
-async def _leg(self, message, fresh=False):
-    if fresh:
-        await self._svc.create_session(app_name=config.APP, user_id=config.USER, session_id=st.run_id)
-    async for ev in self._runner.run_async(user_id=config.USER, session_id=st.run_id, new_message=message):
-        self._absorb(ev)          # fold the ADK event into RunState, publish one app event
-    self._settle()                # waiting_pick, rendering, or done
+async for ev in self._runner.run_async(user_id=config.USER, session_id=run_id, new_message=message):
+    self._absorb(ev)    # fold the ADK event into the run state, publish one app event
 
-# the gate's answer and the render's delivery are the same call with a function_response
-part = Part(function_response=FunctionResponse(id=call_id, name=name, response=response))
-await self._leg(Content(role="user", parts=[part]))`;
+# the gate's answer and the render's delivery are the same call, with a function_response part
+part = Part(function_response=FunctionResponse(id=call_id, name=name, response=response))`;
 
-const CODE_EVENT = `// one message on GET /api/events
-{"type": "gate.open", "seq": 14, "at": 1788756422.1,
- "message": "Pick tonight's direction: 1, 2, 3 or 4.",
- "candidates": [{"title": "...", "angle": "...", "hook": "...", "sources": ["backlog", "feedback", "trends"]}, ...],
- "state": {"status": "waiting_pick", "run_id": "run_1788756405", "active": "direction_gate",
-           "nodes_seen": ["scan_trends", "read_backlog", "read_feedback", "join_research", "propose_directions", "direction_gate"],
-           "research": {"trends": [...], "backlog": 15, "feedback": [...]}, "memory_facts": 4, ...}}`;
 
 function ArchFigure() {
-  const box = (x: number, y: number, w: number, h: number, label: string, sub: string, color: string) => (
+  const box = (x: number, y: number, w: number, h: number, label: string, sub: string, color: string, dashed = false) => (
     <g key={label}>
-      <rect x={x} y={y} width={w} height={h} rx={12} fill={tint(color, 0.08)} stroke={color} strokeOpacity="0.7" />
-      <text x={x + w / 2} y={y + 20} textAnchor="middle" fontSize="11" style={mono} fill={color}>{label}</text>
-      <text x={x + w / 2} y={y + 36} textAnchor="middle" fontSize="8.5" style={mono} fill="currentColor" opacity="0.65">{sub}</text>
+      <rect x={x} y={y} width={w} height={h} rx={12} fill={tint(color, 0.06)} stroke={color} strokeOpacity="0.75" strokeDasharray={dashed ? "6 4" : undefined} />
+      <text x={x + 14} y={y + 20} fontSize="11" style={mono} fill={color}>{label}</text>
+      <text x={x + 14} y={y + 35} fontSize="8.5" style={mono} fill="currentColor" opacity="0.65">{sub}</text>
     </g>
   );
   return (
     <figure className="m-0 mt-4">
-      <svg viewBox="0 0 900 230" className="h-auto w-full text-fg" role="img" aria-label="The app: the React page talks to the FastAPI server over REST and one SSE stream; the server holds a Runner over the complete workflow, a render poller, a publisher and an avatar job; the workflow reaches Gemini, Memory Bank, RAG Engine and Veo; the container ships to Cloud Run.">
+      <svg viewBox="0 0 940 320" className="h-auto w-full text-fg" role="img" aria-label="Google Cloud holds everything. Inside it, one Cloud Run service runs the whole app: vibestudio/web, the React page, and vibestudio/server, the FastAPI process with the Runner over the finished workflow. The page and the server talk over REST and one SSE stream. The server's run_async calls reach GEAP: Gemini, Memory Bank, RAG Engine and Veo. Your browser opens the service URL from outside. deploy.py ships the folder with gcloud run deploy.">
         <defs>
           <marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
           </marker>
         </defs>
-        {box(20, 40, 180, 150, "vibestudio/web", "the React page", CYAN)}
-        <text x="36" y="96" fontSize="9" style={mono} fill="currentColor" opacity="0.7">idea · backlog · graph</text>
-        <text x="36" y="112" fontSize="9" style={mono} fill="currentColor" opacity="0.7">events · stage · pick</text>
-        <text x="36" y="128" fontSize="9" style={mono} fill="currentColor" opacity="0.7">player · thumbnail · publish</text>
-        <text x="36" y="144" fontSize="9" style={mono} fill="currentColor" opacity="0.7">profile · avatar</text>
-        <line x1="200" y1="100" x2="290" y2="100" stroke={CYAN} strokeWidth="1.4" markerEnd="url(#arch-arrow)" />
-        <text x="245" y="92" textAnchor="middle" fontSize="8.5" style={mono} fill={CYAN}>SSE /api/events</text>
-        <line x1="290" y1="140" x2="200" y2="140" stroke="currentColor" strokeOpacity="0.6" strokeWidth="1.2" markerEnd="url(#arch-arrow)" />
-        <text x="245" y="156" textAnchor="middle" fontSize="8.5" style={mono} fill="currentColor" opacity="0.7">REST /api/*</text>
-        {box(290, 40, 300, 150, "vibestudio/server", "FastAPI · one process", AMBER)}
-        <rect x="306" y="86" width="268" height="26" rx="7" fill={tint(AMBER, 0.13)} stroke={AMBER} />
-        <text x="440" y="103" textAnchor="middle" fontSize="9.5" style={mono} fill={AMBER}>Runner(app_name, agent=wf, session_service)</text>
-        <text x="320" y="132" fontSize="9" style={mono} fill="currentColor" opacity="0.7">bus · render poller · publisher (3×)</text>
-        <text x="320" y="148" fontSize="9" style={mono} fill="currentColor" opacity="0.7">avatar job · backlog / profile files</text>
-        <text x="320" y="164" fontSize="9" style={mono} fill="currentColor" opacity="0.7">server/agent: the finished graph, byte for byte</text>
-        <line x1="590" y1="100" x2="680" y2="100" stroke="currentColor" strokeOpacity="0.6" strokeWidth="1.2" markerEnd="url(#arch-arrow)" />
-        <text x="635" y="92" textAnchor="middle" fontSize="8.5" style={mono} fill="currentColor" opacity="0.7">run_async</text>
-        {box(680, 40, 200, 70, "Google Cloud", "Gemini · Memory Bank · RAG · Veo", PURPLE)}
-        {box(680, 120, 200, 70, "Cloud Run", "one container, one URL", GREEN)}
-        <path d="M440 190 L 440 210 L 780 210 L 780 190" fill="none" stroke={GREEN} strokeOpacity="0.8" strokeWidth="1.2" strokeDasharray="4 3" markerEnd="url(#arch-arrow)" />
-        <text x="610" y="224" textAnchor="middle" fontSize="8.5" style={mono} fill={GREEN}>deploy.py: gcloud run deploy --source vibestudio</text>
+        {/* the viewer, outside */}
+        <rect x="14" y="120" width="110" height="60" rx="10" fill="var(--overlay)" stroke="var(--hairline)" />
+        <text x="69" y="145" textAnchor="middle" fontSize="10" style={mono} fill="currentColor">your browser</text>
+        <text x="69" y="161" textAnchor="middle" fontSize="8" style={mono} fill="currentColor" opacity="0.6">the service URL</text>
+        <line x1="124" y1="150" x2="176" y2="150" stroke="currentColor" strokeOpacity="0.6" strokeWidth="1.2" markerEnd="url(#arch-arrow)" />
+        <text x="150" y="142" textAnchor="middle" fontSize="7.5" style={mono} fill="currentColor" opacity="0.7">https</text>
+
+        {/* Google Cloud: the ground */}
+        {box(160, 14, 766, 292, "Google Cloud", "project pokedemo-test", GREEN)}
+
+        {/* Cloud Run: the whole app in one service */}
+        {box(178, 58, 480, 226, "Cloud Run", "one container, one URL · vibestudio/", GREEN, true)}
+        {box(194, 106, 176, 160, "vibestudio/web", "the React page", CYAN)}
+        <text x="208" y="162" fontSize="8.5" style={mono} fill="currentColor" opacity="0.7">idea · backlog · graph</text>
+        <text x="208" y="177" fontSize="8.5" style={mono} fill="currentColor" opacity="0.7">events · stage · pick</text>
+        <text x="208" y="192" fontSize="8.5" style={mono} fill="currentColor" opacity="0.7">player · thumbnail · publish</text>
+        <text x="208" y="207" fontSize="8.5" style={mono} fill="currentColor" opacity="0.7">profile · avatar · history</text>
+        <line x1="370" y1="160" x2="452" y2="160" stroke={CYAN} strokeWidth="1.3" markerEnd="url(#arch-arrow)" />
+        <text x="411" y="152" textAnchor="middle" fontSize="8" style={mono} fill={CYAN}>SSE /api/events</text>
+        <line x1="452" y1="200" x2="370" y2="200" stroke="currentColor" strokeOpacity="0.6" strokeWidth="1.2" markerEnd="url(#arch-arrow)" />
+        <text x="411" y="216" textAnchor="middle" fontSize="8" style={mono} fill="currentColor" opacity="0.7">REST /api/*</text>
+        {box(454, 106, 190, 160, "vibestudio/server", "FastAPI · one process", AMBER)}
+        <rect x="466" y="150" width="166" height="24" rx="7" fill={tint(AMBER, 0.14)} stroke={AMBER} />
+        <text x="549" y="166" textAnchor="middle" fontSize="8.5" style={mono} fill={AMBER}>Runner(agent=wf)</text>
+        <text x="468" y="194" fontSize="8" style={mono} fill="currentColor" opacity="0.7">platform: bus · files · publish</text>
+        <text x="468" y="208" fontSize="8" style={mono} fill="currentColor" opacity="0.7">avatar · telemetry · graphinfo</text>
+        <text x="468" y="222" fontSize="8" style={mono} fill="currentColor" opacity="0.7">agent/: the finished graph</text>
+        <text x="468" y="236" fontSize="8" style={mono} fill="currentColor" opacity="0.7">the render poller answers the call</text>
+
+        {/* GEAP */}
+        <line x1="644" y1="162" x2="716" y2="162" stroke={PURPLE} strokeWidth="1.3" markerEnd="url(#arch-arrow)" />
+        <text x="680" y="154" textAnchor="middle" fontSize="8" style={mono} fill={PURPLE}>run_async</text>
+        {box(718, 106, 190, 160, "GEAP", "the services the graph calls", PURPLE)}
+        <text x="732" y="162" fontSize="9" style={mono} fill="currentColor" opacity="0.85">Gemini · the agent nodes</text>
+        <text x="732" y="180" fontSize="9" style={mono} fill="currentColor" opacity="0.85">Memory Bank · the callbacks</text>
+        <text x="732" y="198" fontSize="9" style={mono} fill="currentColor" opacity="0.85">RAG Engine · read_feedback</text>
+        <text x="732" y="216" fontSize="9" style={mono} fill="currentColor" opacity="0.85">Veo · render_desk</text>
+        <text x="732" y="240" fontSize="8" style={mono} fill="currentColor" opacity="0.6">Cloud Trace · the spans</text>
+
+        {/* the deploy */}
+        <text x="418" y="298" textAnchor="middle" fontSize="8.5" style={mono} fill={GREEN}>gcloud run deploy --source vibestudio · the folder becomes the container</text>
       </svg>
-      <figcaption className="mt-2 text-xs text-fg-muted">The page never imports ADK or reads a file. The server owns the Runner, the poller, the publisher, and the files; the whole folder ships as one container.</figcaption>
+      <figcaption className="mt-2 text-xs text-fg-muted">
+        The page never imports ADK or reads a file. The server owns the Runner, the poller, the publisher and the files, and every model, memory, retrieval and render call leaves the container for GEAP in the same project.
+      </figcaption>
     </figure>
   );
 }
 
-function CopyLine({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      onClick={() => {
-        navigator.clipboard?.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1200);
-      }}
-      className="flex w-full items-center justify-between gap-3 rounded-lg border border-hairline bg-input px-3 py-2 text-left font-mono text-xs text-fg hover:border-vibe-cyan/60"
-      title="copy for a terminal"
-    >
-      <span className="truncate">{text}</span>
-      <span className="shrink-0 text-[10px] text-fg-muted">{copied ? "copied" : "copy"}</span>
-    </button>
-  );
-}
-
-/** The deploy, run from here: `python vibestudio/deploy.py` as a worker on the
- *  lab server, its output streamed, the service URL at the end. */
+/** The deploy, run from here: the gcloud command (wrapped by vibestudio/deploy.py,
+ *  which fills in the env values) as a worker on the lab server, its output
+ *  streamed, the service URL at the end. */
 function DeployRunner() {
   const [lines, setLines] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
@@ -157,8 +151,8 @@ function DeployRunner() {
           </p>
           <h2 className="font-display mt-2 text-2xl">Ship it to Cloud Run.</h2>
           <p className="mt-2 max-w-2xl text-sm text-fg-muted">
-            The button runs the command below on this server and streams its output. Cloud Build reads the Dockerfile, builds the page and the server into
-            one image, and Cloud Run serves it. The first deploy takes a few minutes; later ones are faster.
+            The button runs the gcloud command below from this server and streams its output. Cloud Build reads the Dockerfile, builds the page and the server
+            into one image, and Cloud Run serves it. The first deploy takes a few minutes; later ones are faster.
             {status?.gcloud_project ? (
               <>
                 {" "}
@@ -175,12 +169,11 @@ function DeployRunner() {
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">the command</p>
-          <div className="mt-1">
-            <CopyLine text="python vibestudio/deploy.py" />
-          </div>
+          <pre className="mt-1 overflow-x-auto rounded-lg border border-hairline bg-input px-3 py-2 font-mono text-[11px] leading-relaxed text-fg">{CODE_GCLOUD}</pre>
           <p className="mt-2 text-xs text-fg-muted">
-            Reads the project and the switches from <code className="font-mono text-fg">.env</code>, the two resource names from{" "}
-            <code className="font-mono text-fg">runs/memorybank.json</code> and <code className="font-mono text-fg">runs/ragcorpus.json</code>, and passes them as env vars. Nothing is copied by hand.
+            One instance kept warm with session affinity, because a run's state lives in the process. The env values come from{" "}
+            <code className="font-mono text-fg">.env</code> and from <code className="font-mono text-fg">runs/memorybank.json</code> and{" "}
+            <code className="font-mono text-fg">runs/ragcorpus.json</code>; the button fills them in and runs this command.
           </p>
         </div>
         <div>
@@ -195,7 +188,7 @@ function DeployRunner() {
       {(lines.length > 0 || running) && (
         <div className="mt-4 overflow-hidden rounded-2xl border border-hairline bg-input">
           <div className="flex items-center justify-between border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-            <span>python vibestudio/deploy.py · output</span>
+            <span>gcloud run deploy · output</span>
             <span>{running ? "running…" : exit === 0 ? "done" : exit === null ? "" : `exit ${exit}`}</span>
           </div>
           <pre className="max-h-72 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">{lines.filter((l) => !/Warning|warn\(/.test(l)).join("\n") || "starting…"}</pre>
@@ -232,37 +225,16 @@ export function Deploy() {
         blurb="Every step so far ran the graph through adk web. The app in vibestudio/ runs it through the same class the dev UI uses, a Runner, with its own page in front and one event stream between them. Read how it is put together, run it here, then ship it."
       />
 
-      <In delay={0.1}>
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {RUNNER_POINTS.map((p, i) => (
-            <motion.div key={p.t} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.08 }} className="rounded-3xl border border-hairline bg-card p-5">
-              <p className="text-sm font-semibold" style={{ color: GREEN }}>
-                {p.t}
-              </p>
-              <p className="mt-2 text-sm text-fg-muted">{p.d}</p>
-            </motion.div>
-          ))}
-        </section>
-      </In>
-
       <In delay={0.2}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">How it is put together</p>
-          <h2 className="font-display mt-2 text-2xl">Two halves, one stream.</h2>
+          <h2 className="font-display mt-2 text-2xl">The app on Cloud Run, the graph's services on GEAP.</h2>
           <ArchFigure />
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
-              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">vibestudio/server/runner.py · the Runner</div>
-              <pre className="max-h-80 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
-                <code>{CODE_RUNNER}</code>
-              </pre>
-            </div>
-            <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
-              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">one event on the stream</div>
-              <pre className="max-h-80 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
-                <code>{CODE_EVENT}</code>
-              </pre>
-            </div>
+          <div className="mt-4 max-w-3xl overflow-hidden rounded-2xl border border-hairline bg-input">
+            <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">vibestudio/server/runner.py · the Runner</div>
+            <pre className="overflow-x-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
+              <code>{CODE_RUNNER}</code>
+            </pre>
           </div>
           <p className="mt-4 max-w-3xl text-sm text-fg-muted">
             The Runner drives the graph on a worker thread with its own event loop, so a slow node never stalls the server. Every ADK event is folded into one
@@ -272,34 +244,41 @@ export function Deploy() {
           </p>
           <div className="mt-4 overflow-x-auto rounded-2xl border border-hairline bg-input px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
             <pre className="m-0">{`vibestudio/
-  server/main.py      FastAPI: the page, /api, /static      server/runner.py    the Runner, RunState, the render poller
-  server/bus.py       the event bus, the SSE stream          server/publish.py   vibetube.dev, three attempts, then it asks
-  server/api.py       the REST surface                       server/avatar.py    a portrait from your description
-  server/files.py     backlog.txt, profile.json, thumbnails  server/graphinfo.py the drawing, from wf.graph
-  server/agent/       the finished agent (checks/verify_app.py keeps it byte-equal to the solution)
-  web/                the React page                         Dockerfile · deploy.py · run.sh`}</pre>
+  server/
+    main.py                 FastAPI: the page, /api, /static
+    api.py                  the REST surface: run, pick, publish, backlog, profile, history
+    runner.py               the Runner over the finished workflow, the render poller
+    platform/               bus (the SSE stream), files, publish, avatar, telemetry, graphinfo
+    agent/                  the finished agent, byte-equal to the lab's agent/ (checks/verify_app.py)
+      graph.py              the workflow: direction_gate (4d), persist_direction (5a), policy_check (5b),
+                            quarantine and the edge list (5c), read_feedback (7b), store_video (8b)
+      desk.py               render_desk and render_submit, the LongRunningFunctionTool (8a)
+      schemas.py            Directions, CleanedDirection, Script (4c, 5b, 5c)
+      cleanup_tools.py      find_policy_hits, suggest_replacement (5c)
+      trends.py · backlog.txt · comments.md · policy_words.txt · policy_replacements.txt
+      platform/
+        memory.py           recall_taste, remember_pick, Memory Bank (6)
+        rag.py              retrieve, RAG Engine (7)
+        videogen.py         start, check, Veo (8)
+        state.py · config.py
+  web/                      the React page
+  Dockerfile · deploy.py · run.sh
+
+The stage apps of steps 3 to 8 (stage0_prompt … stage6_video) each wired a subset of this graph.
+The app skips them and runs wf from agent/graph.py, the complete workflow. The delivery console
+of step 8 is not needed here: runner.py polls Veo and answers the pending call itself.`}</pre>
           </div>
         </section>
       </In>
 
       <In delay={0.3}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: CYAN }}>
-            Run it here first
-          </p>
-          <h2 className="font-display mt-2 text-2xl">The app, on this machine.</h2>
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">What Cloud Run is</p>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
-            In <b>tab 1</b>, from the repo root. The first start builds the page; then the app is on port 4700. It shares this repo's{" "}
-            <code className="font-mono text-fg">.env</code> and <code className="font-mono text-fg">runs/</code>, so the bank and the corpus from steps 6 and 7 are
-            already connected.
-          </p>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <CopyLine text="vibestudio/run.sh" />
-            <CopyLine text="http://localhost:4700" />
-          </div>
-          <p className="mt-3 text-xs text-fg-muted">
-            Type an idea, or leave it empty. The graph you built runs left to right on the page; it stops for your pick, and later for the render. With{" "}
-            <code className="font-mono text-fg">STUDIO_REAL_VIDEO=0</code> the render is a stand-in and there is no clip to play.
+            Cloud Run is a serverless service for hosting your application and your agents. It scales instances up and down with traffic, and bills per
+            request time. You can deploy with one <code className="font-mono text-fg">gcloud</code> command; here that command is embedded in a process behind
+            the button below. This app keeps a run's state in its process, so the deploy asks for
+            one instance kept warm and session affinity; a production version would keep that state in the session store and let instances come and go.
           </p>
         </section>
       </In>
@@ -308,17 +287,6 @@ export function Deploy() {
         <DeployRunner />
       </In>
 
-      <In delay={0.5}>
-        <section className="rounded-3xl border border-hairline bg-card p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">What Cloud Run is</p>
-          <p className="mt-2 max-w-3xl text-sm text-fg-muted">
-            A managed place to run a container: you hand it an image and a port, it gives you an HTTPS URL, scales instances up and down with traffic, and bills
-            per request time. <code className="font-mono text-fg">gcloud run deploy --source</code> does the build too, from the Dockerfile in the folder. This app
-            keeps a run's state in its process, so <code className="font-mono text-fg">deploy.py</code> asks for one instance kept warm and session affinity; a
-            production version would keep that state in the session store and let instances come and go.
-          </p>
-        </section>
-      </In>
     </div>
   );
 }

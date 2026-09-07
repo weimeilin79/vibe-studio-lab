@@ -7,7 +7,7 @@ import { Stage } from "./Stage";
 import { api, useStudio } from "./lib/api";
 import type { Profile } from "./lib/types";
 
-const EMPTY: Profile = { display_name: "", description: "", platform_url: "https://vibetube.dev", event_code: "", avatar_url: "" };
+const EMPTY: Profile = { display_name: "", description: "", platform_url: "https://vibetube.dev", event_code: "", avatar_url: "", project_id: "" };
 const THEME_KEY = "vibe-studio-theme";
 
 function useTheme() {
@@ -56,6 +56,23 @@ export function App() {
   useEffect(() => {
     if (last?.type === "profile.saved" || last?.type === "avatar.ready") api.profile().then(setProfile).catch(() => {});
   }, [last]);
+  // A retry in progress: the step, the attempt that failed, and when the next try starts.
+  const [retry, setRetry] = useState<{ step: string; attempt: number; of: number; deadline: number; detail: string } | null>(null);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!last) return;
+    if (last.type === "retry") {
+      const d = last as Record<string, unknown>;
+      setRetry({ step: String(d.step), attempt: Number(d.attempt), of: Number(d.of), deadline: Date.now() + Number(d.wait_s) * 1000, detail: String(d.detail ?? "") });
+    } else {
+      setRetry(null);
+    }
+  }, [last]);
+  useEffect(() => {
+    if (!retry) return;
+    const t = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(t);
+  }, [retry]);
   const onError = useCallback((m: string) => {
     setToast(m);
     window.setTimeout(() => setToast(""), 5000);
@@ -127,6 +144,23 @@ export function App() {
             </button>
           </div>
         </header>
+        {retry && (
+          <div className="retrybar" role="status">
+            <span className="clock" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                <line x1="12" y1="12" x2="12" y2="6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <line x1="12" y1="12" x2="16" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ transformOrigin: "12px 12px", transform: `rotate(${((now / 1000) % 60) * 6}deg)` }} />
+              </svg>
+            </span>
+            <span>
+              <b>{retry.step}</b> failed on attempt {retry.attempt} of {retry.of}. Waiting{" "}
+              <span className="mono">{Math.max(0, Math.ceil((retry.deadline - now) / 1000))}s</span> to re-submit
+              {retry.attempt + 1 <= retry.of ? ` (attempt ${retry.attempt + 1} of ${retry.of})` : ""}.
+              {retry.detail ? <span className="note"> {retry.detail}</span> : null}
+            </span>
+          </div>
+        )}
         {tab === "studio" ? (
           <div className="grid">
             <aside className="side">

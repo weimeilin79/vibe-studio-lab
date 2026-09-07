@@ -63,10 +63,11 @@ HOLES = {
                    '''quarantine = Agent(
     name="quarantine",
     model=config.MODEL,
-    mode="task",
     instruction=QUARANTINE_INSTRUCTION,
+    mode="task",
     tools=[find_policy_hits, suggest_replacement],
-    output_schema=CleanedDirection)'''),
+    output_schema=CleanedDirection,
+)'''),
     "ROUTER_EDGES": ("stage3_router/agent.py",
                      '''           (join_research, propose_directions, direction_gate)])  # TODO: ROUTER_EDGES - 5a: append persist_direction; 5b: append policy_check, then its two routes''',
                      '''           (join_research, propose_directions, direction_gate,
@@ -76,10 +77,9 @@ HOLES = {
 
     # Step 5a · the state write in persist_direction
     "PERSIST_STATE": ("agent/graph.py",
-                      '''    # TODO: PERSIST_STATE - yield an Event whose state holds direction, angle, hook, constraints, and user:prefs''',
+                      '''    # TODO: PERSIST_STATE - yield an Event whose state holds direction, angle, hook, and user:prefs''',
                       '''    yield Event(state={"direction": chosen["title"], "angle": chosen.get("angle", ""),
-                       "hook": hook, "constraints": constraints or "(none yet)",
-                       "user:prefs": {"last_direction": chosen["title"]}})'''),
+                       "hook": hook, "user:prefs": {"last_direction": chosen["title"]}})'''),
 
     # Step 6 · memory as two callbacks on the step 5 graph
     "MEMORY_RECALL": ("stage4_memory/agent.py",

@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from agent import config  # noqa: E402
+from agent.platform import config  # noqa: E402
 from server.api import code, lab  # noqa: E402
 from server.services.events import snapshot, watcher  # noqa: E402
 from server.services.workers import workers  # noqa: E402

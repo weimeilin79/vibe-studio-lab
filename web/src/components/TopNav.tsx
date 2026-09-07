@@ -36,15 +36,6 @@ export function TopNav({ activeSlug }: { activeSlug: string }) {
         </Link>
         <div className="flex items-center gap-3">
           <LiveRunPill />
-          <a
-            href="/inspector/dev-ui/"
-            target="_blank"
-            rel="noreferrer"
-            className="hidden rounded-lg border border-hairline px-3 py-1.5 font-mono text-[11px] text-fg-muted transition-colors hover:text-fg md:inline"
-            title="Open the ADK dev UI (raw events, sessions, state)"
-          >
-            Inspector ↗
-          </a>
           <button
             onClick={toggle}
             className="rounded-lg p-2 transition-opacity hover:opacity-80"

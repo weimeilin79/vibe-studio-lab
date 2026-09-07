@@ -12,7 +12,7 @@ nodes yourself; the instructions and the tools they use live in agent/.
 from google.adk import Agent, Event, Workflow
 from google.adk.workflow import START, JoinNode
 
-from agent import config
+from agent.platform import config
 from agent.cleanup_tools import find_policy_hits, suggest_replacement
 from agent.graph import (PROPOSE_INSTRUCTION, QUARANTINE_INSTRUCTION,
                          SCRIPT_INSTRUCTION, direction_gate, persist_direction,

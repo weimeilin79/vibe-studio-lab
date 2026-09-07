@@ -31,6 +31,7 @@ from . import config
 MODEL = os.environ.get("STUDIO_VEO_MODEL") or (
     "veo-3.1-fast-generate-001" if config.VERTEX else "veo-3.1-fast-generate-preview")
 LOCATION = os.environ.get("STUDIO_VEO_LOCATION", "us-central1")
+ON_RETRY = None    # an app may set this to be told about retries (step, attempt, of, wait_s, detail); the lab prints
 RETRIES = int(os.environ.get("STUDIO_VIDEO_RETRIES", "8"))
 INTERVAL_S = float(os.environ.get("STUDIO_VIDEO_INTERVAL", "70"))
 TIMEOUT_S = float(os.environ.get("STUDIO_VIDEO_TIMEOUT", "600"))
@@ -96,6 +97,8 @@ def _retry(step: str, fn, retries: int, interval_s: float):
             last = f"{type(e).__name__}: {str(e)[:160]}"
             print(f"  [videogen] {step} attempt {attempt}/{retries} failed: {last}")
             if attempt < retries:
+                if ON_RETRY:
+                    ON_RETRY(step=f"Veo {step}", attempt=attempt, of=retries, wait_s=interval_s, detail=last)
                 time.sleep(interval_s)
     raise VideoError(f"{step} failed after {retries} attempts ({last})")
 

@@ -10,7 +10,7 @@ export function Stage({ state, profile, onError }: { state: RunState; profile: P
         <div className="card stage">
           <div className="eyebrow">Stage</div>
           <h3>Nothing running.</h3>
-          <p className="note">Type an idea or leave it empty, then kick off. The research fan-out runs first, the proposer pitches four directions, and the graph stops for your pick.</p>
+          <p className="note">Type an idea or leave it empty, then kick off. The research fan-out runs first, propose_directions pitches four directions, and the graph stops for your pick.</p>
         </div>
       );
     case "running":
@@ -44,7 +44,7 @@ function Running({ state }: { state: RunState }) {
       <h3>{after ? `Direction ${state.pick}: ${state.direction.title || "…"}` : "Research in, four directions coming."}</h3>
       {!after ? (
         <>
-          <p className="note">The readers report to the join; the proposer writes candidates from the trends, the backlog, the audience's comments, and what Memory Bank knows about you.</p>
+          <p className="note">The readers report to the join; propose_directions writes candidates from the trends, the backlog, the audience's comments, and what Memory Bank knows about you.</p>
           <div className="kv">
             <b>trends</b>
             <span>{r.trends?.length ? r.trends.slice(0, 3).join(" · ") : "…"}</span>

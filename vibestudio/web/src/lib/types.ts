@@ -74,6 +74,7 @@ export interface Profile {
   platform_url: string;
   event_code: string;
   avatar_url: string;
+  project_id: string;
 }
 
 export const IDLE: RunState = {

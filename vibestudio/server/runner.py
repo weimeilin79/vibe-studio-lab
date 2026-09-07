@@ -24,10 +24,10 @@ from google.adk import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.genai.types import Content, FunctionResponse, Part
 
-from .agent import config, state as run_file
-from .agent import videogen
+from .agent.platform import config, state as run_file
+from .agent.platform import videogen
 from .agent.graph import wf
-from .bus import bus
+from .platform.bus import bus
 
 POLL_S = 10.0
 GATE = "adk_request_input"
@@ -157,7 +157,7 @@ class Studio:
         st.status = "done"
         st.finished_at = time.time()
         st.active = None
-        from .files import history_upsert
+        from .platform.files import history_upsert
         history_upsert(self.record())
         bus.publish("run.done", seconds=round(st.finished_at - (st.started_at or st.finished_at)),
                     render=st.render, script_title=st.script.get("title", ""))

@@ -15,7 +15,7 @@ import os
 import time
 from typing import Any
 
-from agent import config
+from agent.platform import config
 
 WATCHED = [config.STATE, config.RUNS / "sessions.db",
            config.RUNS / "ui_last.json", config.RUNS / "memorybank.json",

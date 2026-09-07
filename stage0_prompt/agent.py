@@ -11,7 +11,7 @@ blacklist the model certifies for itself. Nothing here is checkable.
 """
 from google.adk import Agent
 
-from agent import config
+from agent.platform import config
 
 
 def check_trends() -> dict:

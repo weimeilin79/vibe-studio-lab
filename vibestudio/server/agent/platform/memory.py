@@ -15,11 +15,11 @@ Two ADK callbacks connect it to the workflow (step 6), no new nodes:
     remember_pick  after_agent_callback on scripter - writes what the creator
                    picked and shipped, so the taste keeps moving
 
-Console:  python -m agent.bank          create or connect the bank
-          python -m agent.bank load     seed the creator's history
-          python -m agent.bank list     what the bank holds
+Console:  python -m agent.platform.bank          create or connect the bank
+          python -m agent.platform.bank load     seed the creator's history
+          python -m agent.platform.bank list     what the bank holds
 
-Documents belong in RAG Engine and numbers in BigQuery; a person's
+Documents belong in RAG Engine; a person's
 preferences belong here.
 """
 from __future__ import annotations
@@ -94,6 +94,9 @@ def engine_name(create: bool = False) -> str | None:
     return eng.api_resource.name
 
 
+ON_RETRY = None    # an app may set this to be told about retries (step, attempt, of, wait_s, detail); the lab prints
+
+
 def _call(label: str, fn, tries: int = 6, wait_s: float = 8.0):
     """Memory Bank answers 500 now and then, in bursts. Retry with a growing
     pause, then let the error through."""
@@ -107,6 +110,8 @@ def _call(label: str, fn, tries: int = 6, wait_s: float = 8.0):
             if attempt < tries:
                 pause = wait_s * attempt
                 print(f"  [memory] {label} failed ({str(e)[:60]}), retry {attempt}/{tries - 1} in {pause:.0f}s")
+                if ON_RETRY:
+                    ON_RETRY(step=f"Memory Bank {label}", attempt=attempt, of=tries, wait_s=pause, detail=f"{type(e).__name__}: {str(e)[:120]}")
                 time.sleep(pause)
     raise last
 
@@ -153,7 +158,7 @@ def remember(text: str) -> list[dict]:
     did: CREATED, UPDATED, or nothing new."""
     name = engine_name()
     if not name:
-        raise RuntimeError("no Memory Bank connected - run: python -m agent.bank")
+        raise RuntimeError("no Memory Bank connected - run: python -m agent.platform.bank")
     op = _call("generate", lambda: _cli().agent_engines.memories.generate(
         name=name, scope=SCOPE,
         direct_contents_source={"events": [{"content": {"role": "user", "parts": [{"text": text}]}}]},

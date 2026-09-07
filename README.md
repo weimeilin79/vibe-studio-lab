@@ -46,18 +46,23 @@ vibestudio/run.sh               # the app on http://localhost:4700
 python vibestudio/deploy.py     # the same app on Cloud Run (or the button in step 9)
 ```
 
+The app sends ADK's traces to Cloud Trace in your project (Trace Explorer, service `vibestudio`). `STUDIO_TRACING=0` turns that off.
+
 ## Repo map
 
 ```
 agent/          the backend you read and edit: the graph (graph.py), the trend pool
-                (trends.py), the backlog (backlog.txt), Memory Bank (memory.py, bank.py),
-                RAG Engine (rag.py, comments.md), the render desk (desk.py, videogen.py,
-                deliver.py), the policy word lists
+                (trends.py), the backlog (backlog.txt), the render desk (desk.py), the
+                delivery console (deliver.py), the policy word lists
+agent/platform/ env and paths (config.py), the session helpers (drive.py), the run file
+                (state.py), and the GEAP clients: Memory Bank (memory.py, bank.py),
+                RAG Engine (rag.py), Veo (videogen.py)
 stage0_prompt/ … stage6_video/
                 the sandbox apps, one per step, each a subset of the same graph; adk web lists them
 starter/        the nine hands-on files exactly as students receive them
 server/ web/    the learning center: the editor API, the verifiers, the SSE stream, the mounted dev UI
-vibestudio/     the app of step 9: its own server, its own page, its own copy of the finished agent
+vibestudio/     the app of step 9: server/ (main, api, runner), server/platform/ (bus, files,
+                publish, avatar, telemetry, graphinfo), web/ (the page), server/agent/ (the finished agent)
 checks/         the hole registry (holes.py) and its verifiers
 scripts/        preflight · start · starter · carve · rescue · reset · dev
 CODELAB.md      the lab itself; codelab-img/ holds its figures

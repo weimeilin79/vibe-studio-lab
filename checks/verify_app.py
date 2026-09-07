@@ -9,8 +9,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from checks.holes import HOLES  # noqa: E402
 
-COPIED = ["graph.py", "memory.py", "rag.py", "videogen.py", "desk.py", "schemas.py", "cleanup_tools.py",
-          "state.py", "trends.py", "policy_words.txt", "policy_replacements.txt", "comments.md", "backlog.txt"]
+COPIED = ["graph.py", "desk.py", "schemas.py", "cleanup_tools.py", "trends.py", "policy_words.txt", "policy_replacements.txt", "comments.md", "backlog.txt",
+          "platform/__init__.py", "platform/memory.py", "platform/rag.py", "platform/videogen.py", "platform/state.py"]   # platform/config.py is the app's own
 APP = ROOT / "vibestudio" / "server" / "agent"
 
 
@@ -31,6 +31,7 @@ def main() -> int:
         want, dst = finished(name), APP / name
         same = dst.exists() and dst.read_bytes() == want
         if not same and sync:
+            dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(want)
             print(f"  ~ {name}: written from the finished agent/{name}")
         elif same:

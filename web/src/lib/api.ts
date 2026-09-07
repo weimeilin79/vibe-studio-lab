@@ -44,6 +44,7 @@ export const api = {
   labStage0: () => fetch("/api/lab/stage0").then((r) => r.json() as Promise<Stage0Status>),
   holes: () => fetch("/api/lab/holes").then((r) => r.json() as Promise<Record<string, string>>),
   fillHoles: (names: string[]) => post<{ filled: string[] }>("/api/lab/holes/fill", { names }),
+  quarantineSkeleton: () => post<{ ok: boolean; state: string; detail?: string }>("/api/lab/quarantine/skeleton"),
   getCode: (path: string) => fetch(`/api/code?path=${encodeURIComponent(path)}`).then((r) => r.json()),
   putCode: (path: string, content: string) => post("/api/code", { path, content }),
 };

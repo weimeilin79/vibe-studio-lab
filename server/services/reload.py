@@ -11,7 +11,7 @@ from __future__ import annotations
 import importlib
 import sys
 
-from agent import config
+from agent.platform import config
 
 
 class _Handle:

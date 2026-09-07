@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { In, StepHeader } from "../components/shared";
 import { COLORS, tint } from "./colors";
@@ -17,7 +18,7 @@ interface GNode {
 
 /** The finished workflow, the way the app draws it: layers snake across rows,
  *  the first row runs left to right, the second runs back. */
-const NODES: GNode[] = [
+const ALL_NODES: GNode[] = [
   { name: "__START__", kind: "start", layer: 0, row: 0, rows: 1, step: "" },
   { name: "scan_trends", kind: "function", layer: 1, row: 0, rows: 3, step: "step 4" },
   { name: "read_backlog", kind: "function", layer: 1, row: 1, rows: 3, step: "step 4" },
@@ -33,7 +34,7 @@ const NODES: GNode[] = [
   { name: "store_video", kind: "function", layer: 9, row: 0, rows: 1, step: "step 8" },
 ];
 
-const EDGES: { from: string; to: string; route?: string }[] = [
+const ALL_EDGES: { from: string; to: string; route?: string }[] = [
   { from: "__START__", to: "scan_trends" },
   { from: "__START__", to: "read_backlog" },
   { from: "__START__", to: "read_feedback" },
@@ -51,7 +52,7 @@ const EDGES: { from: string; to: string; route?: string }[] = [
   { from: "render_desk", to: "store_video" },
 ];
 
-const ORDER = ["__START__", "scan_trends", "read_backlog", "read_feedback", "join_research", "propose_directions", "direction_gate", "persist_direction", "policy_check", "scripter", "render_desk", "store_video"];
+const ALL_ORDER = ["__START__", "scan_trends", "read_backlog", "read_feedback", "join_research", "propose_directions", "direction_gate", "persist_direction", "policy_check", "scripter", "render_desk", "store_video"];
 
 const KIND_COLOR: Record<Kind, string> = {
   start: "currentColor",
@@ -82,9 +83,24 @@ const H = 34;
 const PAD = 26;
 const mono = { fontFamily: "var(--font-mono)" } as const;
 
-function SnakeGraph() {
-  const rowOf = (layer: number) => Math.floor(layer / COLS);
-  const colOf = (layer: number) => (rowOf(layer) % 2 === 0 ? layer % COLS : COLS - 1 - (layer % COLS));
+/** The workflow drawn the way the app draws it. `only` limits it to the nodes
+ *  built so far (layers are re-packed, a layer's stack is re-counted);
+ *  `highlight` marks the node added in the current part. */
+export function SnakeGraph({ only, highlight, cols = COLS, label, hover, onHover }: { only?: string[]; highlight?: string; cols?: number; label?: string; hover?: string | null; onHover?: (name: string | null) => void } = {}) {
+  const NODES = useMemo(() => {
+    const keep = only ? ALL_NODES.filter((n) => only.includes(n.name)) : ALL_NODES;
+    const layers = [...new Set(keep.map((n) => n.layer))].sort((a, b) => a - b);
+    return keep.map((n) => {
+      const layer = layers.indexOf(n.layer);
+      const same = keep.filter((m) => m.layer === n.layer);
+      return { ...n, layer, row: same.indexOf(n), rows: same.length };
+    });
+  }, [only]);
+  const names = new Set(NODES.map((n) => n.name));
+  const EDGES = ALL_EDGES.filter((e) => names.has(e.from) && names.has(e.to));
+  const ORDER = ALL_ORDER.filter((n) => names.has(n));
+  const rowOf = (layer: number) => Math.floor(layer / cols);
+  const colOf = (layer: number) => (rowOf(layer) % 2 === 0 ? layer % cols : cols - 1 - (layer % cols));
   const rows = Math.max(...NODES.map((n) => rowOf(n.layer))) + 1;
   const stackOf = Array.from({ length: rows }, (_, r) => Math.max(1, ...NODES.filter((n) => rowOf(n.layer) === r).map((n) => n.rows)));
   const rowTop: number[] = [];
@@ -94,7 +110,7 @@ function SnakeGraph() {
     y += stackOf[r] * STACK + 34;
   }
   const height = y;
-  const width = PAD * 2 + COLS * COL - (COL - W);
+  const width = PAD * 2 + Math.min(cols, NODES.length) * COL - (COL - W);
   const pos = new Map<string, { x: number; y: number }>();
   for (const n of NODES) {
     const r = rowOf(n.layer);
@@ -125,7 +141,7 @@ function SnakeGraph() {
   const period = ORDER.length * 0.5 + 1.5;
   return (
     <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${width} ${height}`} className="mx-auto h-auto w-full min-w-[760px] max-w-[1080px] text-fg" role="img" aria-label="The finished workflow: START fans out to scan_trends, read_backlog and read_feedback, then join_research, propose_directions, direction_gate, persist_direction, policy_check routing OK to scripter and BLOCK to quarantine, render_desk, store_video.">
+      <svg viewBox={`0 0 ${width} ${height}`} className="mx-auto h-auto w-full min-w-[760px] max-w-[1080px] text-fg" role="img" aria-label={label ?? "The finished workflow: START fans out to scan_trends, read_backlog and read_feedback, then join_research, propose_directions, direction_gate, persist_direction, policy_check routing OK to scripter and BLOCK to quarantine, render_desk, store_video."}>
         <defs>
           <marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
             <path d="M0 0L10 5 0 10z" fill="#7b8794" />
@@ -153,21 +169,22 @@ function SnakeGraph() {
           const idx = ORDER.indexOf(n.name);
           if (n.kind === "start") {
             return (
-              <g key={n.name}>
-                <circle cx={p.x} cy={p.y} r={15} fill="var(--overlay)" stroke="currentColor" strokeOpacity="0.6" />
+              <g key={n.name} onMouseEnter={onHover ? () => onHover(n.name) : undefined} onMouseLeave={onHover ? () => onHover(null) : undefined} style={onHover ? { cursor: "pointer" } : undefined}>
+                <circle cx={p.x} cy={p.y} r={15} fill="var(--overlay)" stroke={hover === n.name ? COLORS.cyan : "currentColor"} strokeOpacity={hover === n.name ? 1 : 0.6} strokeWidth={hover === n.name ? 2 : 1} />
                 <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize="10" style={mono} fill="currentColor">START</text>
               </g>
             );
           }
           return (
-            <g key={n.name} transform={`translate(${p.x - W / 2} ${p.y - H / 2})`}>
+            <g key={n.name} transform={`translate(${p.x - W / 2} ${p.y - H / 2})`} onMouseEnter={onHover ? () => onHover(n.name) : undefined} onMouseLeave={onHover ? () => onHover(null) : undefined} style={onHover ? { cursor: "pointer" } : undefined}>
               {idx >= 0 && (
                 <motion.rect x={-5} y={-5} width={W + 10} height={H + 10} rx={13} fill="none" stroke={color === "currentColor" ? COLORS.cyan : color} strokeWidth={5} initial={{ opacity: 0 }} animate={{ opacity: [0, 0.5, 0] }} transition={{ duration: 1.0, delay: idx * 0.5, repeat: Infinity, repeatDelay: period - 1.0 }} />
               )}
-              <rect width={W} height={H} rx={9} fill={n.kind === "function" ? "var(--overlay)" : tint(color, 0.08)} stroke={color === "currentColor" ? "var(--hairline)" : color} strokeWidth="1.2" />
+              {n.name === highlight && <rect x={-4} y={-4} width={W + 8} height={H + 8} rx={12} fill="none" stroke={COLORS.red} strokeWidth="1.5" strokeDasharray="5 4" />}
+              <rect width={W} height={H} rx={9} fill={hover === n.name ? tint(color === "currentColor" ? COLORS.cyan : color, 0.16) : n.kind === "function" ? "var(--overlay)" : tint(color, 0.08)} stroke={hover === n.name ? (color === "currentColor" ? COLORS.cyan : color) : color === "currentColor" ? "var(--hairline)" : color} strokeWidth={hover === n.name ? 2 : 1.2} />
               <text x={W / 2} y={21} textAnchor="middle" fontSize="12.5" style={mono} fill={color === "currentColor" ? "currentColor" : color}>{n.name}</text>
-              <text x={W / 2} y={labelAbove.has(n.name) ? -8 : H + 13} textAnchor="middle" fontSize="9.5" style={mono} fill="currentColor" opacity="0.6">
-                {KIND_LABEL[n.kind]}{n.step ? ` · ${n.step}` : ""}
+              <text x={W / 2} y={labelAbove.has(n.name) ? -8 : H + 13} textAnchor="middle" fontSize="9.5" style={mono} fill={n.name === highlight ? COLORS.red : "currentColor"} opacity={n.name === highlight ? 1 : 0.6}>
+                {n.name === highlight ? "new in this part" : `${KIND_LABEL[n.kind]}${n.step ? ` · ${n.step}` : ""}`}
               </text>
             </g>
           );

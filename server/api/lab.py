@@ -16,7 +16,7 @@ from collections import Counter
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from agent import config, drive
+from agent.platform import config, drive
 
 from ..services.workers import workers
 
@@ -473,10 +473,14 @@ async def stage3():
     nodes: list[str] = []
     routes: list[str] = []
     tool_calls: dict[str, int] = {}
-    cleaned: dict | None = None
+    cleaned: dict | None = None            # from the latest session where quarantine finished a task
+    cleaned_script_title = ""              # the script written in that same session, after the cleanup
     blocked_message = ""
     script_title = ""
     for _, sess in sessions:
+        finished_task = False
+        sess_cleaned: dict | None = None
+        sess_script = ""
         for ev in sess.events:
             name = _node_name(ev)
             if name and name != "stage3_router" and name not in nodes:
@@ -487,18 +491,28 @@ async def stage3():
             if name == "quarantine":
                 for f in ev.get_function_calls() or []:
                     tool_calls[f.name] = tool_calls.get(f.name, 0) + 1
+                    if f.name == "finish_task":
+                        finished_task = True
                 out = getattr(ev, "output", None)
-                if isinstance(out, dict) and out.get("title"):
-                    cleaned = {k: out.get(k, "") for k in ("title", "angle", "hook")}
+                # the 5b placeholder also outputs a dict with a title, flagged blocked; only a
+                # task agent's finish_task output counts as a cleaned direction
+                if finished_task and isinstance(out, dict) and out.get("title") and not out.get("blocked"):
+                    sess_cleaned = {k: out.get(k, "") for k in ("title", "angle", "hook")}
                 for text in _texts(ev):
                     if "blocked" in text.lower():
                         blocked_message = text[:200]
             if name == "scripter":
                 for text in _texts(ev):
                     try:
-                        script_title = json.loads(text).get("title", "") or script_title
+                        title = json.loads(text).get("title", "")
                     except (ValueError, AttributeError):
                         continue
+                    if title:
+                        script_title = title
+                        if sess_cleaned:
+                            sess_script = title
+        if sess_cleaned:
+            cleaned, cleaned_script_title = sess_cleaned, sess_script
     return {
         "edges": [list(e) for e in edges],
         "chain": list(tail),
@@ -517,12 +531,12 @@ async def stage3():
         "block_runs": routes.count("BLOCK"),
         "tool_calls": tool_calls,
         "cleaned": cleaned,
+        "cleaned_script_title": cleaned_script_title,
         "blocked_message": blocked_message,
         "script_title": script_title,
         "direction": state.get("direction"),
         "angle": state.get("angle"),
         "hook": state.get("hook"),
-        "constraints": state.get("constraints"),
         "user_prefs": state.get("user:prefs"),
         "state_keys": sorted(k for k in state.keys() if not k.startswith("_")),
     }
@@ -546,7 +560,7 @@ def _callback_kw(path, agent_name: str, kw: str) -> str | None:
 async def memory_bank():
     """The bank itself: connected or not, and everything it holds for the
     creator's scope. One network call; the page asks on a click."""
-    from agent import memory
+    from agent.platform import memory
     engine = memory.engine_name()
     if not engine:
         return {"connected": False, "engine": None, "memories": []}
@@ -562,7 +576,7 @@ async def memory_bank():
 async def stage4():
     """Evidence for step 6: the two callbacks in stage4_memory/agent.py, the
     bank connection, and what the latest run read and wrote."""
-    from agent import memory
+    from agent.platform import memory
     path = ROOT / "stage4_memory" / "agent.py"
     recall = _callback_kw(path, "propose_directions", "before_model_callback")
     remember = _callback_kw(path, "scripter", "after_agent_callback")
@@ -605,7 +619,7 @@ BANK_CMDS = {"connect": [], "load": ["load"], "list": ["list"], "reset": ["reset
 
 @router.post("/bank/{cmd}")
 async def bank_run(cmd: str):
-    """Run `python -m agent.bank <cmd>` as a worker. Its output streams on the
+    """Run `python -m agent.platform.bank <cmd>` as a worker. Its output streams on the
     event bus as log lines with verb "bank"; the page shows them live."""
     from ..services.workers import workers
     if cmd not in BANK_CMDS:
@@ -630,7 +644,7 @@ async def bank_status():
 async def rag_corpus():
     """The corpus: connected or not, and the files it holds. One network
     call; the page asks on a click."""
-    from agent import rag
+    from agent.platform import rag
     name = rag.corpus_name()
     if not name:
         return {"connected": False, "corpus": None, "files": [], "comments": len(rag.comments())}
@@ -649,7 +663,7 @@ FEEDBACK_EDGE = ("START", "read_feedback", "join_research")
 async def stage5():
     """Evidence for step 7b: the third reader's edge in stage5_rag/agent.py,
     the corpus connection, and what the latest run retrieved and proposed."""
-    from agent import rag
+    from agent.platform import rag
     edges = workflow_edges(ROOT / "stage5_rag" / "agent.py")
     sessions = await _sessions("stage5_rag")
     nodes: list[str] = []
@@ -692,7 +706,7 @@ RAG_CMDS = {"connect": [], "load": ["load"], "list": ["list"], "reset": ["reset"
 
 @router.post("/rag/{cmd}")
 async def rag_run(cmd: str, body: dict | None = None):
-    """Run `python -m agent.rag <cmd>` as a worker. Output streams on the event
+    """Run `python -m agent.platform.rag <cmd>` as a worker. Output streams on the event
     bus as log lines with verb "rag". `query` takes {"text": ...}."""
     from ..services.workers import workers
     if cmd not in RAG_CMDS:
@@ -747,7 +761,7 @@ async def stage6():
     """Evidence for step 8: the wrapper and the last chain in stage6_video/agent.py,
     and the latest session's render: pending (a call with no final response),
     delivered (render_url in state), or not started."""
-    from agent import state as run_state
+    from agent.platform import state as run_state
     path = ROOT / "stage6_video" / "agent.py"
     wrapped = tool_wrapped(path, "render_desk", "render_submit")
     edges = workflow_edges(path)
@@ -760,8 +774,10 @@ async def stage6():
     pending: dict | None = None
     submitted: dict | None = None
     st: dict = {}
+    session: dict | None = None
     if sessions:
-        _, sess = sessions[-1]
+        user, sess = sessions[-1]
+        session = {"id": sess.id, "user": user}
         st = dict(sess.state or {})
         lr, calls, receipts, latest = set(), {}, {}, {}
         for ev in sess.events:
@@ -793,6 +809,7 @@ async def stage6():
         "deliver_wired": deliver_wired,
         "chain_wired": RENDER_CHAIN in edges,
         "sessions": len(sessions),
+        "session": session,                       # the latest session: the dev UI opens it by id
         "nodes_ran": nodes,
         "desk_ran": "render_desk" in nodes,
         "submitted": submitted,
@@ -882,6 +899,39 @@ async def holes_status():
         first = snippet.splitlines()[0].strip()
         out[name] = "open" if anchor in src else "filled" if (snippet in src or first in src) else "unknown"
     return out
+
+
+QUARANTINE_SKELETON = """quarantine = Agent(
+    name="quarantine",
+    model=config.MODEL,
+    instruction=QUARANTINE_INSTRUCTION,
+    # TODO: QUARANTINE - add mode="task", tools=[find_policy_hits, suggest_replacement], output_schema=CleanedDirection
+)"""
+
+
+@router.post("/quarantine/skeleton")
+async def quarantine_skeleton():
+    """Step 5c, edit 1: put the Agent skeleton in place of the 5b placeholder
+    function, so the student adds the three arguments instead of typing the
+    whole node. Idempotent: an Agent already in place is left alone."""
+    from checks.holes import HOLES
+    from ..services import reload as agent_reload
+    from ..services.events import bus
+    from .code import _splice, _write, symbol_span
+    rel, _, _ = HOLES["QUARANTINE"]
+    p = ROOT / rel
+    src = p.read_text()
+    if _assigned_call(p, "quarantine") in ("Agent", "LlmAgent"):
+        return {"ok": True, "state": "agent"}
+    # the placeholder, however the student has formatted it: replace the whole
+    # top-level definition, found by name
+    span = symbol_span(src, "quarantine")
+    if span is None:
+        return {"ok": False, "state": "missing", "detail": "quarantine is not defined in stage3_router/agent.py; paste the complete node from the hints"}
+    _write(p, _splice(src, span, QUARANTINE_SKELETON + "\n"))
+    agent_reload.after_save(rel)
+    bus.mark_dirty()
+    return {"ok": True, "state": "skeleton"}
 
 
 @router.post("/holes/fill")

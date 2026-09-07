@@ -11,11 +11,11 @@ Here the documents are the audience's comments on the channel's past videos
 (agent/comments.md), and the workflow reads them through one more node in
 the research fan-out (step 7): read_feedback in agent/graph.py.
 
-Console:  python -m agent.rag                 create the corpus (once), or connect
-          python -m agent.rag load            upload agent/comments.md; rerun after editing it
-          python -m agent.rag query "text"    the passages nearest to a question
-          python -m agent.rag list            the files in the corpus
-          python -m agent.rag reset           delete every file; the corpus stays
+Console:  python -m agent.platform.rag                 create the corpus (once), or connect
+          python -m agent.platform.rag load            upload agent/comments.md; rerun after editing it
+          python -m agent.platform.rag query "text"    the passages nearest to a question
+          python -m agent.platform.rag list            the files in the corpus
+          python -m agent.platform.rag reset           delete every file; the corpus stays
 
 The corpus is a RAG Engine resource in your project. Its name is cached in
 runs/ragcorpus.json; that file is the connection. A person's preferences
@@ -136,7 +136,7 @@ def load() -> dict:
     replaces the passages instead of adding to them."""
     name = corpus_name()
     if not name:
-        raise RuntimeError("no corpus connected - run: python -m agent.rag")
+        raise RuntimeError("no corpus connected - run: python -m agent.platform.rag")
     rag = _rag()
     for f in list_files():
         if f["display_name"] == COMMENTS_FILE.name:
@@ -179,7 +179,7 @@ def retrieve(query: str, k: int = TOP_K) -> list[dict]:
     vectors, return their text. Each row: text, score, source."""
     name = corpus_name()
     if not name:
-        raise RuntimeError("no corpus connected - run: python -m agent.rag")
+        raise RuntimeError("no corpus connected - run: python -m agent.platform.rag")
     rag = _rag()
     resp = _call("retrieval_query", lambda: rag.retrieval_query(
         rag_resources=[rag.RagResource(rag_corpus=name)], text=query,
@@ -214,7 +214,7 @@ def connect() -> None:
     for f in files:
         print(f"  ragFile {f['id']} · {f['display_name']}")
     if not files:
-        print("next: python -m agent.rag load")
+        print("next: python -m agent.platform.rag load")
 
 
 def main(argv=None):
@@ -224,7 +224,7 @@ def main(argv=None):
         connect()
     elif cmd == "load":
         if not corpus_name():
-            print("no corpus yet - run: python -m agent.rag"); return
+            print("no corpus yet - run: python -m agent.platform.rag"); return
         print(f"── loading {COMMENTS_FILE.name} into the corpus ──")
         load()
     elif cmd == "query" and len(argv) > 1:

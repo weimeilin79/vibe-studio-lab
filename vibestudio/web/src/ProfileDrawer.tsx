@@ -48,6 +48,11 @@ export function ProfileDrawer({ profile, last, onSaved, onClose }: { profile: Pr
         <div>
           <b>{profile.display_name || "Vibe Studio creator"}</b>
           <div className="note">shown on the publish card and on the platform, with the avatar if you have one</div>
+          {profile.project_id ? (
+            <div className="note">
+              project <span className="mono">{profile.project_id}</span> · the platform keeps one video per project and room, so a new publish replaces the earlier one
+            </div>
+          ) : null}
         </div>
       </div>
       <label className="f">

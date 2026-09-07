@@ -106,12 +106,12 @@ export interface Stage3Status {
   block_runs: number;
   tool_calls: Record<string, number>;
   cleaned: { title: string; angle: string; hook: string } | null;
+  cleaned_script_title: string;
   blocked_message: string;
   script_title: string;
   direction: string | null;
   angle: string | null;
   hook: string | null;
-  constraints: string | null;
   user_prefs: { last_direction?: string } | null;
   state_keys: string[];
 }
@@ -166,6 +166,7 @@ export interface Stage6Status {
   deliver_wired: boolean;
   chain_wired: boolean;
   sessions: number;
+  session: { id: string; user: string } | null;
   nodes_ran: string[];
   desk_ran: boolean;
   submitted: { call_id: string; prompt: string; operation: string } | null;

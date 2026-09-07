@@ -2,10 +2,12 @@
 
     POST {platform}/api/events/{event}/videos
       title, description, duration ("m:ss"), displayName, projectId, videoFile,
+      (projectId is stable per creator and room, so publishing again replaces the video)
       thumbnailFile (if the page captured one), avatarFile (if the creator has one)
 
-Three attempts, a few seconds apart. Connection errors and any non-200
-answer count as failures. After the third, the app stops and asks the
+Three attempts, a few seconds apart; twenty seconds when the platform says
+it is still processing the project's previous upload (409). Connection errors
+and any non-200 answer count as failures. After the third, the app stops and asks the
 creator to confirm the event code and the platform URL; a confirmed retry
 starts a fresh three.
 """
@@ -16,12 +18,13 @@ import time
 
 import httpx
 
-from .agent import config
+from ..agent.platform import config
 from .bus import bus
 from .files import profile
 
 ATTEMPTS = 3
 PAUSE_S = 4.0
+PROCESSING_PAUSE_S = 20.0    # the platform answers 409 while it still processes the previous upload for the project
 
 
 def _duration(ms: int | None) -> str:
@@ -59,17 +62,17 @@ async def publish(state, confirmed: bool = False) -> dict:
             "description": state.script.get("description", ""),
             "duration": _duration(state.render.get("duration_ms")),
             "displayName": prof["display_name"] or "Vibe Studio creator",
-            "projectId": state.run_id or f"run_{int(time.time())}"}
+            "projectId": prof["project_id"]}             # one project per creator and room: a new publish replaces the video
     last = ""
     for n in range(1, ATTEMPTS + 1):
         rec["attempts"] = n
-        bus.publish("publish.attempt", n=n, of=ATTEMPTS, url=url)
+        bus.publish("publish.attempt", n=n, of=ATTEMPTS, url=url, project=prof["project_id"])
         ok, detail, vid = await asyncio.to_thread(_post, url, data, clip, thumb, avatar)
         if ok:
             watch = f"{prof['platform_url']}/e/{prof['event_code']}" + (f"?v={vid}" if vid else "")
             rec.update(status="done", url=watch, video_id=vid, detail="")
             from .files import history_upsert
-            from .runner import studio
+            from ..runner import studio
             if studio.state is state:
                 history_upsert(studio.record())
             bus.publish("publish.done", url=watch, video_id=vid, attempts=n)
@@ -77,7 +80,9 @@ async def publish(state, confirmed: bool = False) -> dict:
         last = detail
         rec["detail"] = detail
         if n < ATTEMPTS:
-            await asyncio.sleep(PAUSE_S)
+            pause = PROCESSING_PAUSE_S if detail.startswith("409") and "processing" in detail else PAUSE_S
+            bus.publish("retry", step="publish", attempt=n, of=ATTEMPTS, wait_s=pause, detail=detail)
+            await asyncio.sleep(pause)
     rec.update(status="needs_confirm", detail=last)
     bus.publish("publish.needs_confirm", detail=last, attempts=ATTEMPTS, confirmed_before=confirmed)
     return rec

@@ -25,8 +25,8 @@ try:
 except ImportError:
     tick("greenlet (async sqlite)", False, "uv sync")
 
-from agent import config  # noqa: E402
-if os.environ.get("STUDIO_VERTEX", "").lower() in ("1", "true"):   # same rule as agent/config.py
+from agent.platform import config  # noqa: E402
+if os.environ.get("STUDIO_VERTEX", "").lower() in ("1", "true"):   # same rule as agent/platform/config.py
     tick("auth path A: Vertex via ADC (STUDIO_VERTEX=1)", True)
 else:
     tick("auth path B: GOOGLE_API_KEY set", bool(os.environ.get("GOOGLE_API_KEY")),

@@ -27,7 +27,7 @@ import time
 HERE = pathlib.Path(__file__).resolve().parent            # vibestudio/
 REPO = HERE.parent
 RUNS = REPO / "runs"
-PASS_THROUGH = ["STUDIO_VERTEX", "STUDIO_MODEL", "STUDIO_IMAGE_MODEL", "STUDIO_REAL_VIDEO",
+PASS_THROUGH = ["STUDIO_VERTEX", "STUDIO_MODEL", "STUDIO_IMAGE_MODEL", "STUDIO_REAL_VIDEO", "STUDIO_TRACING", "VIBETUBE_PROJECT",
                 "STUDIO_VEO_MODEL", "STUDIO_VEO_LOCATION", "STUDIO_VIDEO_RETRIES", "STUDIO_VIDEO_INTERVAL",
                 "STUDIO_VIDEO_TIMEOUT", "VIBETUBE_URL", "VIBETUBE_EVENT", "VIBETUBE_NAME"]
 
@@ -65,7 +65,7 @@ def main() -> int:
         print("no project: set GOOGLE_CLOUD_PROJECT in .env or pass --project"); return 2
     bank = os.environ.get("STUDIO_MEMORY_BANK") or cached("memorybank.json")
     corpus = os.environ.get("STUDIO_RAG_CORPUS") or cached("ragcorpus.json")
-    for what, val, cmd in (("Memory Bank", bank, "python -m agent.bank"), ("RAG corpus", corpus, "python -m agent.rag")):
+    for what, val, cmd in (("Memory Bank", bank, "python -m agent.platform.bank"), ("RAG corpus", corpus, "python -m agent.platform.rag")):
         print(f"  {what}: {val or '(none: run ' + cmd + ' first; the app degrades without it)'}")
     vars_ = {"GOOGLE_CLOUD_PROJECT": project, "STUDIO_GCP_PROJECT": project, "STUDIO_VERTEX": "1",
              "STUDIO_MEMORY_BANK": bank, "STUDIO_RAG_CORPUS": corpus}
@@ -73,11 +73,12 @@ def main() -> int:
         if env.get(k):
             vars_[k] = env[k]
     vars_ = {k: v for k, v in vars_.items() if v}
-    for k in ("VIBETUBE_URL", "VIBETUBE_EVENT", "VIBETUBE_NAME"):
+    for k in ("VIBETUBE_URL", "VIBETUBE_EVENT", "VIBETUBE_NAME", "VIBETUBE_PROJECT"):
         print(f"  {k}: {vars_.get(k) or '(not in .env; the app\'s profile drawer can set it)'}")
     # gcloud splits on commas unless a custom delimiter is declared: ^|^ makes | the separator
     env_arg = "^|^" + "|".join(f"{k}={v}" for k, v in vars_.items())
     cmd = ["gcloud", "run", "deploy", a.service, "--source", str(HERE), "--project", project, "--region", a.region,
+           "--labels", "dev-tutorial-codelab=vibetube",
            "--allow-unauthenticated", "--memory", "2Gi", "--cpu", "2", "--timeout", "3600",
            "--concurrency", "40", "--max-instances", "1", "--min-instances", "1", "--session-affinity",
            "--set-env-vars", env_arg, "--quiet"]

@@ -13,7 +13,7 @@ import { CheckRow, EditPanel, RunPanel, VerifyPanel } from "./FanOut";
  * Step 6, in parts:
  *   6a  Memory Bank: what it is for, scope, extraction and consolidation, the
  *       two topics; create the bank and seed the creator's history from the console
- *   6b  callbacks: before_model_callback reads the memories into the proposer's
+ *   6b  callbacks: before_model_callback reads the memories into propose_directions'
  *       request, after_agent_callback writes the pick after the scripter; run twice
  */
 
@@ -164,7 +164,7 @@ function BankLedger({ title, refreshKey = 0 }: { title: string; refreshKey?: num
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The bank</p>
           <h2 className="font-display mt-2 text-2xl">{title}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-fg-muted">Reads the bank in your project, oldest memory first. The same call the callback makes before the proposer runs.</p>
+          <p className="mt-1 max-w-2xl text-sm text-fg-muted">Reads the bank in your project, oldest memory first. The same call the callback makes before propose_directions runs.</p>
         </div>
         <button onClick={load} className="flex items-center gap-2 rounded-xl border border-hairline bg-overlay px-4 py-2 font-mono text-xs text-fg-muted hover:text-fg">
           <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Show the bank
@@ -202,12 +202,12 @@ function BankLedger({ title, refreshKey = 0 }: { title: string; refreshKey?: num
 
 type BankCmd = "connect" | "load" | "list" | "reset";
 const BANK_COMMANDS: { cmd: BankCmd; line: string; what: string }[] = [
-  { cmd: "connect", line: "python -m agent.bank", what: "Creates the Agent Engine that hosts the bank, once, and prints the scope and the topics. Runs again as connect." },
-  { cmd: "load", line: "python -m agent.bank load", what: "Seeds four past sessions, oldest first: two picks of animals with one stated rule, one of gadgets, one of fantasy. Under a minute." },
-  { cmd: "list", line: "python -m agent.bank list", what: "Everything the bank holds for the creator, oldest first. Compare it with the four sessions." },
+  { cmd: "connect", line: "python -m agent.platform.bank", what: "Creates the Agent Engine that hosts the bank, once, and prints the scope and the topics. Runs again as connect." },
+  { cmd: "load", line: "python -m agent.platform.bank load", what: "Seeds four past sessions, oldest first: two picks of animals with one stated rule, one of gadgets, one of fantasy. Under a minute." },
+  { cmd: "list", line: "python -m agent.platform.bank list", what: "Everything the bank holds for the creator, oldest first. Compare it with the four sessions." },
 ];
 
-/** The bank commands, run here as the same `python -m agent.bank` process a
+/** The bank commands, run here as the same `python -m agent.platform.bank` process a
  *  terminal would start. Output streams in as it is printed. */
 function BankRunner({ onDone }: { onDone: () => void }) {
   const [lines, setLines] = useState<string[]>([]);
@@ -289,7 +289,7 @@ function BankRunner({ onDone }: { onDone: () => void }) {
       {(lines.length > 0 || running) && (
         <div className="mt-4 overflow-hidden rounded-2xl border border-hairline bg-input">
           <div className="flex items-center justify-between border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-            <span>python -m agent.bank · output</span>
+            <span>python -m agent.platform.bank · output</span>
             <span>{running ? "running…" : exit === 0 ? "done" : exit === null ? "" : `exit ${exit}`}</span>
           </div>
           <pre className="max-h-72 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
@@ -321,7 +321,7 @@ function BankOverlay({ cmd, lines, running, exit, onClose }: { cmd: BankCmd; lin
         <div className="flex items-center justify-between border-b border-hairline px-5 py-3">
           <div className="flex items-center gap-3">
             {!done && <RefreshCw size={14} className="animate-spin" style={{ color: PURPLE }} />}
-            <span className="font-mono text-xs text-fg">{cmd === "connect" ? "python -m agent.bank" : "python -m agent.bank load"}</span>
+            <span className="font-mono text-xs text-fg">{cmd === "connect" ? "python -m agent.platform.bank" : "python -m agent.platform.bank load"}</span>
           </div>
           <span className="font-mono text-[11px]" style={{ color: failed ? RED : done ? GREEN : "var(--fg-muted)" }}>
             {done ? (failed ? `exited with ${exit}` : "done") : "running on this server…"}
@@ -345,7 +345,7 @@ function BankOverlay({ cmd, lines, running, exit, onClose }: { cmd: BankCmd; lin
   );
 }
 
-/** `python -m agent.bank`: an Agent Engine resource appears in the project,
+/** `python -m agent.platform.bank`: an Agent Engine resource appears in the project,
  *  then the two memory topics are attached to it. The motion repeats while
  *  the command runs; the final state holds once it has finished. */
 function ConnectAnimation({ lines, done }: { lines: string[]; done: boolean }) {
@@ -384,7 +384,7 @@ function ConnectAnimation({ lines, done }: { lines: string[]; done: boolean }) {
   );
 }
 
-/** `python -m agent.bank load`: twelve sessions leave the history column and
+/** `python -m agent.platform.bank load`: twelve sessions leave the history column and
  *  land as memories under the two topics. Progress follows the output. */
 function LoadAnimation({ lines, done }: { lines: string[]; done: boolean }) {
   const sessions = lines.map((l) => l.match(/session\s+(\d+):\s+(.*)/)).filter(Boolean) as RegExpMatchArray[];
@@ -460,14 +460,8 @@ function LoadAnimation({ lines, done }: { lines: string[]; done: boolean }) {
 
 /* ───────────────────────── 6a ───────────────────────── */
 
-const BANK_POINTS = [
-  { t: "Memory about a person", d: "Memory Bank holds facts about one user, kept under a scope: here the creator, as app_name plus user_id. It is not a document store and not analytics." },
-  { t: "Extract, embed, consolidate", d: "You hand it a conversation. A Gemini model extracts the facts worth keeping; the facts are embedded so the service can find the existing memories they resemble; that similarity drives consolidation, so a repeated preference updates one memory instead of adding a duplicate." },
-  { t: "Topics shape the memories", d: "Two custom topics: CREATOR_TASTE, what this creator picks and how that moves, and CHANNEL_RULES, standing instructions. Anything else is not remembered." },
-  { t: "The contrast", d: "Documents and transcripts go to RAG Engine, step 7. Numbers go to BigQuery. A person's preferences go here." },
-];
 
-const CODE_TOPICS = `# agent/memory.py
+const CODE_TOPICS = `# agent/platform/memory.py
 SCOPE = {"app_name": config.APP, "user_id": config.USER}
 TOPICS = {
     "CREATOR_TASTE": "Which video directions this creator picks and passes on, "
@@ -477,14 +471,14 @@ TOPICS = {
 }`;
 
 
-const CODE_REMEMBER = `# agent/memory.py
+const CODE_REMEMBER = `# agent/platform/memory.py
 def remember(text: str) -> list[dict]:
     """Hand one exchange to Memory Bank. It extracts the facts worth keeping,
     consolidates them with the memories it already has, and returns what it
     did: CREATED, UPDATED, or nothing new."""
     name = engine_name()
     if not name:
-        raise RuntimeError("no Memory Bank connected - run: python -m agent.bank")
+        raise RuntimeError("no Memory Bank connected - run: python -m agent.platform.bank")
     op = _cli().agent_engines.memories.generate(
         name=name, scope=SCOPE,
         direct_contents_source={"events": [{"content": {"role": "user", "parts": [{"text": text}]}}]},
@@ -498,6 +492,157 @@ def remember(text: str) -> list[dict]:
                       "fact": (getattr(mem, "fact", "") or "")[:160]})
     return flags`;
 
+/** Memory Bank in one picture: what goes in (the run's exchanges, through one
+ *  generate call), what the service does with it (extract, embed, consolidate
+ *  under a scope and two topics, on GEAP), what comes out (facts, by scope),
+ *  and what does not belong here. */
+function BankFigure() {
+  const box = { fill: "var(--overlay)", stroke: "var(--hairline)" };
+  const mono = { fontFamily: "var(--font-mono)" } as const;
+  return (
+    <figure className="m-0 min-w-[840px]">
+      <svg viewBox="0 0 940 318" role="img" aria-label="The scripter's callback hands one exchange to Memory Bank with memories.generate. Memory Bank, an Agent Engine resource on GEAP, keeps facts under a scope of app_name and user_id and two topics, CREATOR_TASTE and CHANNEL_RULES. Inside, a Gemini model extracts facts, the facts are embedded, and similar facts are consolidated into one memory. propose_directions' callback reads them back with memories.retrieve by scope. Documents go to RAG Engine; a person's preferences go here." className="h-auto w-full text-fg">
+        <defs>
+          <marker id="mb-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+          </marker>
+          <marker id="mb-arrow-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill={PURPLE} />
+          </marker>
+        </defs>
+
+        {/* write side */}
+        <rect x="14" y="70" width="150" height="58" rx="8" {...box} />
+        <text x="89" y="88" fontSize="9.5" style={mono} textAnchor="middle" fill="currentColor">scripter · after the run</text>
+        <text x="89" y="103" fontSize="8" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">"the creator picked X (angle)…"</text>
+        <text x="89" y="117" fontSize="8" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">one exchange, as events</text>
+        <line x1="164" y1="99" x2="248" y2="99" stroke={PURPLE} strokeWidth="1.3" markerEnd="url(#mb-arrow-p)" />
+        <text x="206" y="91" fontSize="8" style={mono} textAnchor="middle" fill={PURPLE}>memories.generate</text>
+        <text x="206" y="112" fontSize="7.5" style={mono} textAnchor="middle" fill="currentColor" opacity="0.6">the write</text>
+
+        {/* the bank */}
+        <rect x="250" y="18" width="440" height="230" rx="14" fill={tint(PURPLE, 0.05)} stroke={PURPLE} strokeWidth="1.3" />
+        <text x="266" y="38" fontSize="11" style={mono} fill={PURPLE}>Memory Bank</text>
+        <text x="674" y="38" fontSize="8.5" style={mono} textAnchor="end" fill="currentColor" opacity="0.6">an Agent Engine resource on GEAP</text>
+        <rect x="266" y="50" width="196" height="40" rx="8" {...box} />
+        <text x="276" y="65" fontSize="8.5" style={mono} fill="currentColor" opacity="0.65">scope · whose memories</text>
+        <text x="276" y="81" fontSize="9" style={mono} fill="currentColor">{'{app_name, user_id}'}: the creator</text>
+        <rect x="478" y="50" width="196" height="40" rx="8" {...box} />
+        <text x="488" y="65" fontSize="8.5" style={mono} fill="currentColor" opacity="0.65">topics · what a memory may be about</text>
+        <text x="488" y="81" fontSize="9" style={mono} fill="currentColor">CREATOR_TASTE · CHANNEL_RULES</text>
+        {/* pipeline */}
+        <rect x="266" y="112" width="120" height="40" rx="8" fill={tint(PURPLE, 0.1)} stroke={PURPLE} strokeOpacity="0.7" />
+        <text x="326" y="128" fontSize="9.5" style={mono} textAnchor="middle" fill={PURPLE}>extract</text>
+        <text x="326" y="142" fontSize="7.5" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">a Gemini model, per topic</text>
+        <line x1="386" y1="132" x2="408" y2="132" stroke="currentColor" strokeWidth="1.1" markerEnd="url(#mb-arrow)" />
+        <rect x="410" y="112" width="120" height="40" rx="8" fill={tint(PURPLE, 0.1)} stroke={PURPLE} strokeOpacity="0.7" />
+        <text x="470" y="128" fontSize="9.5" style={mono} textAnchor="middle" fill={PURPLE}>embed</text>
+        <text x="470" y="142" fontSize="7.5" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">to find what it resembles</text>
+        <line x1="530" y1="132" x2="552" y2="132" stroke="currentColor" strokeWidth="1.1" markerEnd="url(#mb-arrow)" />
+        <rect x="554" y="112" width="120" height="40" rx="8" fill={tint(PURPLE, 0.1)} stroke={PURPLE} strokeOpacity="0.7" />
+        <text x="614" y="128" fontSize="9.5" style={mono} textAnchor="middle" fill={PURPLE}>consolidate</text>
+        <text x="614" y="142" fontSize="7.5" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">merge with a match</text>
+        {/* the memories */}
+        <line x1="614" y1="152" x2="614" y2="170" stroke="currentColor" strokeWidth="1.1" markerEnd="url(#mb-arrow)" />
+        <rect x="266" y="172" width="408" height="62" rx="8" {...box} />
+        <text x="276" y="187" fontSize="8.5" style={mono} fill="currentColor" opacity="0.65">memories · one fact each, under the scope, tagged with a topic</text>
+        <text x="276" y="204" fontSize="8.5" style={mono} fill={PURPLE}>CREATOR_TASTE</text>
+        <text x="380" y="204" fontSize="8.5" style={mono} fill="currentColor">picks small-magic scenes; was gadgets, then animals</text>
+        <text x="276" y="221" fontSize="8.5" style={mono} fill={PURPLE}>CHANNEL_RULES</text>
+        <text x="380" y="221" fontSize="8.5" style={mono} fill="currentColor">no text on screen; nothing that mocks a competitor</text>
+
+        {/* read side */}
+        <line x1="690" y1="99" x2="774" y2="99" stroke={PURPLE} strokeWidth="1.3" markerEnd="url(#mb-arrow-p)" />
+        <text x="732" y="91" fontSize="8" style={mono} textAnchor="middle" fill={PURPLE}>memories.retrieve</text>
+        <text x="732" y="112" fontSize="7.5" style={mono} textAnchor="middle" fill="currentColor" opacity="0.6">the read, by scope</text>
+        <rect x="776" y="70" width="150" height="58" rx="8" {...box} />
+        <text x="851" y="88" fontSize="9.5" style={mono} textAnchor="middle" fill="currentColor">propose_directions</text>
+        <text x="851" y="103" fontSize="8" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">reads every memory in the scope</text>
+        <text x="851" y="117" fontSize="8" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">before its model call</text>
+
+        {/* the contrast */}
+        <line x1="14" y1="270" x2="926" y2="270" stroke="var(--hairline)" />
+        <text x="14" y="290" fontSize="8.5" style={mono} fill="currentColor" opacity="0.65">what goes where</text>
+        <text x="140" y="290" fontSize="8.5" style={mono} fill="currentColor">documents, transcripts → RAG Engine (step 7)</text>
+        <text x="420" y="290" fontSize="8.5" style={mono} fill={PURPLE}>a person's preferences → Memory Bank (this step)</text>
+        <text x="14" y="306" fontSize="8" style={mono} fill="currentColor" opacity="0.55">not a document store, not analytics: facts about one user</text>
+      </svg>
+    </figure>
+  );
+}
+
+/** One generate call, under the hood: the exchange goes in, the two topic
+ *  definitions steer extraction, each fact is embedded and compared with the
+ *  scope's existing memories, and the response says what happened to each. */
+function GenerateFigure() {
+  const box = { fill: "var(--overlay)", stroke: "var(--hairline)" };
+  const mono = { fontFamily: "var(--font-mono)" } as const;
+  return (
+    <figure className="m-0 min-w-[840px]">
+      <svg viewBox="0 0 940 292" role="img" aria-label="One memories.generate call. The exchange text goes in with the scope. A Gemini model extracts facts, one per topic that applies: a CREATOR_TASTE fact and, when the text states a rule, a CHANNEL_RULES fact; anything outside the two topics is dropped. Each fact is embedded and compared with the memories already in the scope: a close match updates that memory, no match creates a new one. The response lists each generated memory with its action, CREATED or UPDATED." className="h-auto w-full text-fg">
+        <defs>
+          <marker id="gn-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+          </marker>
+          <marker id="gn-arrow-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill={PURPLE} />
+          </marker>
+        </defs>
+        {/* the call */}
+        <rect x="14" y="60" width="188" height="90" rx="8" {...box} />
+        <text x="24" y="76" fontSize="8.5" style={mono} fill={PURPLE}>memories.generate(</text>
+        <text x="34" y="90" fontSize="8.5" style={mono} fill="currentColor">scope={'{app_name, user_id}'},</text>
+        <text x="34" y="104" fontSize="8.5" style={mono} fill="currentColor">events=[ "Tonight the creator</text>
+        <text x="34" y="118" fontSize="8.5" style={mono} fill="currentColor">  picked 'Tiny dragon…' (angle).</text>
+        <text x="34" y="132" fontSize="8.5" style={mono} fill="currentColor">  A script was written." ])</text>
+        <text x="108" y="166" fontSize="7.5" style={mono} textAnchor="middle" fill="currentColor" opacity="0.6">remember(text), from the scripter's callback</text>
+        <line x1="202" y1="105" x2="238" y2="105" stroke={PURPLE} strokeWidth="1.2" markerEnd="url(#gn-arrow-p)" />
+
+        {/* extract with topics */}
+        <rect x="240" y="40" width="200" height="130" rx="10" fill={tint(PURPLE, 0.08)} stroke={PURPLE} strokeOpacity="0.8" />
+        <text x="340" y="58" fontSize="9.5" style={mono} textAnchor="middle" fill={PURPLE}>extract · a Gemini model</text>
+        <text x="340" y="72" fontSize="7.5" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">reads the text once per topic</text>
+        <rect x="252" y="82" width="176" height="34" rx="6" {...box} />
+        <text x="262" y="96" fontSize="8.5" style={mono} fill={PURPLE}>CREATOR_TASTE</text>
+        <text x="262" y="109" fontSize="7.5" style={mono} fill="currentColor" opacity="0.7">what they pick, how it moves</text>
+        <rect x="252" y="122" width="176" height="34" rx="6" {...box} />
+        <text x="262" y="136" fontSize="8.5" style={mono} fill={PURPLE}>CHANNEL_RULES</text>
+        <text x="262" y="149" fontSize="7.5" style={mono} fill="currentColor" opacity="0.7">standing instructions</text>
+
+        {/* facts out */}
+        <line x1="428" y1="99" x2="470" y2="86" stroke="currentColor" strokeWidth="1.1" markerEnd="url(#gn-arrow)" />
+        <line x1="428" y1="139" x2="470" y2="150" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" strokeDasharray="4 3" markerEnd="url(#gn-arrow)" />
+        <rect x="472" y="66" width="200" height="40" rx="8" {...box} />
+        <text x="482" y="81" fontSize="8.5" style={mono} fill="currentColor">fact: picks small-magic scenes</text>
+        <text x="482" y="96" fontSize="7.5" style={mono} fill="currentColor" opacity="0.65">tagged CREATOR_TASTE</text>
+        <rect x="472" y="134" width="200" height="34" rx="8" fill="none" stroke="var(--hairline)" strokeDasharray="4 3" />
+        <text x="482" y="149" fontSize="8.5" style={mono} fill="currentColor" opacity="0.6">no rule stated tonight</text>
+        <text x="482" y="161" fontSize="7.5" style={mono} fill="currentColor" opacity="0.5">nothing for CHANNEL_RULES</text>
+        <text x="572" y="196" fontSize="8" style={mono} textAnchor="middle" fill="currentColor" opacity="0.6">"a script was written": outside both topics, dropped</text>
+
+        {/* embed + compare */}
+        <line x1="672" y1="86" x2="712" y2="86" stroke="currentColor" strokeWidth="1.1" markerEnd="url(#gn-arrow)" />
+        <rect x="714" y="40" width="212" height="130" rx="10" fill={tint(PURPLE, 0.08)} stroke={PURPLE} strokeOpacity="0.8" />
+        <text x="820" y="58" fontSize="9.5" style={mono} textAnchor="middle" fill={PURPLE}>embed, then compare</text>
+        <text x="820" y="72" fontSize="7.5" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">with the memories already in the scope</text>
+        <rect x="726" y="82" width="188" height="34" rx="6" {...box} />
+        <text x="736" y="96" fontSize="8.5" style={mono} fill="currentColor">close match → UPDATED</text>
+        <text x="736" y="109" fontSize="7.5" style={mono} fill="currentColor" opacity="0.7">"was gadgets" becomes "now small magic"</text>
+        <rect x="726" y="122" width="188" height="34" rx="6" {...box} />
+        <text x="736" y="136" fontSize="8.5" style={mono} fill="currentColor">no match → CREATED</text>
+        <text x="736" y="149" fontSize="7.5" style={mono} fill="currentColor" opacity="0.7">a new memory under the scope</text>
+
+        {/* response */}
+        <line x1="820" y1="170" x2="820" y2="212" stroke={PURPLE} strokeWidth="1.2" markerEnd="url(#gn-arrow-p)" />
+        <rect x="540" y="214" width="386" height="60" rx="8" {...box} />
+        <text x="550" y="230" fontSize="8.5" style={mono} fill={PURPLE}>response.generated_memories</text>
+        <text x="550" y="246" fontSize="8.5" style={mono} fill="currentColor">[ {'{action: UPDATED, memory: {fact: "…small magic…", topic: …}}'} ]</text>
+        <text x="550" y="262" fontSize="7.5" style={mono} fill="currentColor" opacity="0.65">what remember() returns as flags; the memories themselves stay in the bank</text>
+      </svg>
+    </figure>
+  );
+}
+
 function TheBank() {
   const [tick, setTick] = useState(0);
   return (
@@ -506,35 +651,42 @@ function TheBank() {
         kicker="Step 6a · Memory Bank"
         color={PURPLE}
         title="What the channel remembers about its creator."
-        blurb="Every run so far started from zero. The creator has a history: animals first, then gadgets, and lately fantasy. Memory Bank is where that history lives, and the proposer will read it before it pitches."
+        blurb="The agent has no memory of the creator yet. The more the creator uses it, the more it should remember about their preferences. This creator has a history: animals first, then gadgets, and lately fantasy. Memory Bank is where that history lives, and we will read it before generating the script."
       />
 
       <In delay={0.1}>
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {BANK_POINTS.map((p, i) => (
-            <motion.div key={p.t} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 + i * 0.08 }} className="rounded-3xl border border-hairline bg-card p-5">
-              <p className="text-sm font-semibold" style={{ color: PURPLE }}>
-                {p.t}
-              </p>
-              <p className="mt-2 text-sm text-fg-muted">{p.d}</p>
-            </motion.div>
-          ))}
+        <section className="rounded-3xl border border-hairline bg-card p-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">Memory about a person</p>
+          <h2 className="font-display mt-2 text-2xl">Facts about a person, kept under a scope.</h2>
+          <p className="mt-2 max-w-3xl text-sm text-fg-muted">
+            Memory Bank is a GEAP service that keeps facts about one user. The write is a generate call with the run's exchange: the service extracts the facts, embeds
+            them, and merges each one into the matching memory it already has, or adds it as a new memory. The read is a retrieve call by scope. We will create two custom topics for it, CREATOR_TASTE and CHANNEL_RULES.
+          </p>
+          <div className="mt-4 overflow-x-auto">
+            <BankFigure />
+          </div>
         </section>
       </In>
 
       <In delay={0.2}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The bank's configuration</p>
-          <h2 className="font-display mt-2 text-2xl">One scope, two topics.</h2>
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">MemoryBank configuration</p>
+          <h2 className="font-display mt-2 text-2xl">The scope and the topics.</h2>
+          <p className="mt-2 max-w-3xl text-sm text-fg-muted">
+            Saving is the <code className="font-mono text-fg">memories.generate</code> call in <code className="font-mono text-fg">remember</code>. Under the hood:
+          </p>
+          <div className="mt-4 overflow-x-auto">
+            <GenerateFigure />
+          </div>
           <div className="mt-4 grid gap-4">
             <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
-              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/memory.py · scope and topics</div>
+              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/platform/memory.py · scope and topics</div>
               <pre className="overflow-x-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
                 <code>{CODE_TOPICS}</code>
               </pre>
             </div>
             <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
-              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/memory.py · one write</div>
+              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/platform/memory.py · the write</div>
               <pre className="max-h-72 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
                 <code>{CODE_REMEMBER}</code>
               </pre>
@@ -565,8 +717,8 @@ function TheBank() {
           </p>
           <BankRunner onDone={() => setTick((t) => t + 1)} />
           <div className="flex flex-wrap gap-3">
-            <SourceToggle path="agent/bank.py" label="agent/bank.py · the console: HISTORY and load()" />
-            <SourceToggle path="agent/memory.py" label="agent/memory.py · the client: remember() makes the generate call" />
+            <SourceToggle path="agent/platform/bank.py" label="agent/platform/bank.py · the console: HISTORY and load()" />
+            <SourceToggle path="agent/platform/memory.py" label="agent/platform/memory.py · the client: remember() makes the generate call" />
           </div>
         </section>
       </In>
@@ -591,7 +743,7 @@ const CALLBACK_POINTS = [
   { t: "after_agent_callback", color: PURPLE, d: "Runs on scripter once its turn is over. remember_pick reads the direction from state, hands one sentence about the pick to Memory Bank, and returns None, so the scripter's reply stands." },
 ];
 
-const CODE_RECALL = `# agent/memory.py
+const CODE_RECALL = `# agent/platform/memory.py
 def recall_taste(callback_context, llm_request):
     """before_model_callback for propose_directions: read the creator's
     memories and put them in front of the model, oldest first, so the most
@@ -613,7 +765,7 @@ def recall_taste(callback_context, llm_request):
         "unaffected."])
     return None`;
 
-const CODE_REMEMBER_PICK = `# agent/memory.py
+const CODE_REMEMBER_PICK = `# agent/platform/memory.py
 def remember_pick(callback_context):
     """after_agent_callback for scripter: the creator picked a direction and a
     script now exists for it. Hand that exchange to Memory Bank so the taste
@@ -633,6 +785,72 @@ def remember_pick(callback_context):
     st["memory_written"] = flags
     print(f"  [memory] {', '.join(f['action'] for f in flags) or 'nothing new'}")
     return None`;
+
+/** One agent node's run as a line, with the hook before and after each of
+ *  its three parts: the run itself, the model call, a tool call. The two
+ *  this step uses are marked. */
+function CallbacksFigure() {
+  const box = { fill: "var(--overlay)", stroke: "var(--hairline)" };
+  const mono = { fontFamily: "var(--font-mono)" } as const;
+  const pill = (x: number, label: string, used?: boolean) => (
+    <g>
+      <rect x={x} y={100} width={92} height={26} rx={13} fill={used ? tint(PURPLE, 0.14) : box.fill} stroke={used ? PURPLE : box.stroke} strokeWidth={used ? 1.4 : 1} />
+      <text x={x + 46} y={117} fontSize="8.5" style={mono} textAnchor="middle" fill={used ? PURPLE : "currentColor"}>{label}</text>
+    </g>
+  );
+  const step = (x: number, label: string, sub: string) => (
+    <g>
+      <rect x={x} y={96} width={92} height={34} rx={8} fill={tint(CYAN, 0.1)} stroke={CYAN} strokeWidth="1.2" />
+      <text x={x + 46} y={111} fontSize="9.5" style={mono} textAnchor="middle" fill={CYAN}>{label}</text>
+      <text x={x + 46} y={124} fontSize="7.5" style={mono} textAnchor="middle" fill="currentColor" opacity="0.65">{sub}</text>
+    </g>
+  );
+  const arrow = (x1: number, x2: number) => <line x1={x1} y1={113} x2={x2} y2={113} stroke="currentColor" strokeOpacity="0.5" strokeWidth="1.1" markerEnd="url(#cb-arrow)" />;
+  const bracket = (x1: number, x2: number, y: number, label: string, color = "currentColor", op = 0.6) => (
+    <g>
+      <path d={`M${x1} ${y - 8} L${x1} ${y} L${x2} ${y} L${x2} ${y - 8}`} fill="none" stroke={color} strokeOpacity={op} strokeWidth="1" />
+      <text x={(x1 + x2) / 2} y={y + 13} fontSize="8" style={mono} textAnchor="middle" fill={color} opacity={op + 0.2}>{label}</text>
+    </g>
+  );
+  return (
+    <figure className="m-0 min-w-[860px]">
+      <svg viewBox="0 0 940 246" role="img" aria-label="One agent run, left to right: before_agent, then before_model, the model call, after_model, then, when the model asks for a tool, before_tool, the tool call, after_tool, and finally after_agent. This step uses before_model on propose_directions, where recall_taste adds the memories to the request, and after_agent on scripter, where remember_pick hands the pick to Memory Bank. A callback that returns None lets the run continue; a value replaces what would come next." className="h-auto w-full text-fg">
+        <defs>
+          <marker id="cb-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+          </marker>
+        </defs>
+        <text x="20" y="22" fontSize="8.5" style={mono} fill="currentColor" opacity="0.65">one agent node runs · each hook is an Agent argument named &lt;hook&gt;_callback</text>
+        <path d="M20 44 L20 36 L906 36 L906 44" fill="none" stroke="currentColor" strokeOpacity="0.5" strokeWidth="1" />
+        {pill(20, "before_agent")}
+        {arrow(112, 126)}
+        {pill(128, "before_model", true)}
+        {arrow(220, 234)}
+        {step(236, "model call", "the Gemini request")}
+        {arrow(328, 342)}
+        {pill(344, "after_model")}
+        {arrow(436, 468)}
+        {pill(470, "before_tool")}
+        {arrow(562, 576)}
+        {step(578, "tool call", "a Python function")}
+        {arrow(670, 684)}
+        {pill(686, "after_tool")}
+        {arrow(778, 812)}
+        {pill(814, "after_agent", true)}
+        {bracket(128, 436, 146, "around the model call")}
+        {bracket(470, 778, 146, "around a tool call · only when the model asks for one, once per call")}
+        {/* the two used here */}
+        <line x1="174" y1="126" x2="174" y2="186" stroke={PURPLE} strokeWidth="1.1" strokeDasharray="3 3" />
+        <text x="20" y="200" fontSize="8.5" style={mono} fill={PURPLE}>before_model on propose_directions · recall_taste</text>
+        <text x="20" y="213" fontSize="8" style={mono} fill="currentColor" opacity="0.7">reads the bank and appends the memories to the request, then returns None</text>
+        <line x1="860" y1="126" x2="860" y2="186" stroke={PURPLE} strokeWidth="1.1" strokeDasharray="3 3" />
+        <text x="906" y="200" fontSize="8.5" style={mono} textAnchor="end" fill={PURPLE}>after_agent on scripter · remember_pick</text>
+        <text x="906" y="213" fontSize="8" style={mono} textAnchor="end" fill="currentColor" opacity="0.7">hands the pick to Memory Bank, then returns None</text>
+        <text x="463" y="238" fontSize="8" style={mono} textAnchor="middle" fill="currentColor" opacity="0.6">return None: the run continues as normal · return a value: it replaces what would have come next</text>
+      </svg>
+    </figure>
+  );
+}
 
 function TheCallbacks() {
   const [idea, setIdea] = useState("");
@@ -687,16 +905,27 @@ function TheCallbacks() {
 
       <CatchUp needs={["GATE_INPUT", "PERSIST_STATE", "POLICY_ROUTE"]} color={PURPLE} />
 
+      <In delay={0.05}>
+        <section className="rounded-3xl border border-hairline bg-card p-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The workflow so far</p>
+          <h2 className="font-display mt-2 text-2xl">The same graph, with memory on propose_directions and the scripter.</h2>
+          <WorkflowFigure />
+        </section>
+      </In>
+
       <In delay={0.1}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">ADK callbacks</p>
-          <h2 className="font-display mt-2 text-2xl">Six hooks, three pairs.</h2>
+          <h2 className="font-display mt-2 text-2xl">Hooks before and after the model, the agent, and a tool.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
             A callback is a plain function passed as an argument to <code className="font-mono text-fg">Agent</code>. ADK calls it at a
             fixed point with the objects in play at that point, and reads its return value: <code className="font-mono text-fg">None</code>{" "}
             means continue as normal, anything else replaces what would have happened next. That makes callbacks the place for guardrails,
             logging, caching, and, as here, giving an agent context it did not ask for.
           </p>
+          <div className="mt-4 overflow-x-auto">
+            <CallbacksFigure />
+          </div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
@@ -739,8 +968,8 @@ function TheCallbacks() {
 
       <In delay={0.2}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The two functions</p>
-          <h2 className="font-display mt-2 text-2xl">Read before the proposer, write after the scripter.</h2>
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The callbacks</p>
+          <h2 className="font-display mt-2 text-2xl">Read before propose_directions, write after the scripter.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
             <code className="font-mono text-fg">recall_taste</code> retrieves the creator's memories, oldest first, appends them to the model
             request with one instruction, lean toward the most recent taste and treat the rules as constraints, and stores what it read in
@@ -751,7 +980,7 @@ function TheCallbacks() {
           </p>
           <div className="mt-4 grid gap-4">
             <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
-              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">before the proposer's model call</div>
+              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">before the model call of propose_directions</div>
               <pre className="max-h-[420px] overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
                 <code>{CODE_RECALL}</code>
               </pre>
@@ -769,7 +998,7 @@ function TheCallbacks() {
       <In delay={0.3}>
         <EditPanel
           label="Edit 1 of 2"
-          title="Give the proposer its memory."
+          title="Give propose_directions its memory."
           intro={<>Only <code className="font-mono text-fg">propose_directions</code> is shown, in this step's app, <code className="font-mono text-fg">stage4_memory</code>. Add one keyword argument: <code className="font-mono text-fg">before_model_callback=recall_taste</code>.</>}
           pill={status ? (recallOk ? "recall_taste wired ✓" : status.recall_kw ? `before_model_callback=${status.recall_kw}` : "no before_model_callback") : "…"}
           ok={recallOk}
@@ -837,7 +1066,7 @@ function TheCallbacks() {
           open={open}
           setOpen={setOpen}
           title="Run it with no idea, then with one."
-          intro="Leave the chat box empty on the first run so the proposer works from the backlog, the trends, and the memory alone. Each run is two model calls, the proposer and the scripter, plus the memory read and write."
+          intro="Leave the chat box empty on the first run so propose_directions works from the backlog, the trends, and the memory alone. Each run is two model calls, propose_directions and the scripter, plus the memory read and write."
           idea={idea}
           setIdea={setIdea}
           steps={[
@@ -856,9 +1085,9 @@ function TheCallbacks() {
             {status ? (rememberOk ? "Found in the file." : "Edit 2 above.") : "…"}
           </CheckRow>
           <CheckRow ok={!!status?.bank_connected} label="A Memory Bank is connected">
-            {status ? (status.bank_connected ? "runs/memorybank.json names the Agent Engine." : "Run python -m agent.bank first (6a).") : "…"}
+            {status ? (status.bank_connected ? "runs/memorybank.json names the Agent Engine." : "Run python -m agent.platform.bank first (6a).") : "…"}
           </CheckRow>
-          <CheckRow ok={facts.length > 0} label="The proposer read memories on the latest run">
+          <CheckRow ok={facts.length > 0} label="propose_directions read memories on the latest run">
             {facts.length ? `${facts.length} memories read · newest: ${facts[facts.length - 1].fact.slice(0, 90)}` : "None read yet."}
           </CheckRow>
           <CheckRow ok={written.some((w) => w.action && w.action !== "ERROR")} label="The scripter wrote tonight's pick to the bank">
@@ -867,13 +1096,6 @@ function TheCallbacks() {
         </VerifyPanel>
       </In>
 
-      <In delay={0.55}>
-        <section className="rounded-3xl border border-hairline bg-card p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The workflow so far</p>
-          <h2 className="font-display mt-2 text-2xl">Same graph, two agents with memory.</h2>
-          <WorkflowFigure />
-        </section>
-      </In>
     </div>
   );
 }

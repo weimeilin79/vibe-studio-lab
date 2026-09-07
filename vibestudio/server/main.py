@@ -16,15 +16,25 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from .agent import config
+from .agent.platform import config, memory, videogen
 from .api import router
-from .bus import bus
+from .platform.bus import bus
 from .runner import studio
+from .platform.telemetry import setup_tracing
 
 DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
 
+def _retry_hook(**info) -> None:
+    """A retry in the agent code becomes an event the page shows with a clock."""
+    bus.publish("retry", **info)
+
+
 def create_app() -> FastAPI:
+    print(f"  {setup_tracing()}")
+    videogen.ON_RETRY = _retry_hook
+    memory.ON_RETRY = _retry_hook
+
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
         bus.attach(asyncio.get_running_loop(), studio.snapshot)

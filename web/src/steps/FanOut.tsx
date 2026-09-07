@@ -147,7 +147,7 @@ function GraphIntro() {
 
       <In delay={0.25}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">One node set, four graphs</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The node set and the stage graphs</p>
           <h2 className="font-display mt-2 text-2xl">The sandbox apps reuse the production nodes.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
             Every node function lives once, in <code className="font-mono text-fg">agent/graph.py</code>. The three stage apps
@@ -485,7 +485,7 @@ function DeclareFanOut() {
       <In delay={0.1}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The graph to build</p>
-          <h2 className="font-display mt-2 text-2xl">Three nodes, two edges.</h2>
+          <h2 className="font-display mt-2 text-2xl">Both readers run, then the join releases.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
             In step 3 the model decided whether to call each research tool. Here the graph decides: both readers leave START, so both
             run, and the join does not release until both have reported. The output of this stage is the join's dict. In 4c an agent
@@ -500,7 +500,7 @@ function DeclareFanOut() {
       <In delay={0.2}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The nodes</p>
-          <h2 className="font-display mt-2 text-2xl">Two function nodes and a join.</h2>
+          <h2 className="font-display mt-2 text-2xl">Function nodes and a join.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
             A function node is a plain Python function. It takes <code className="font-mono text-fg">node_input</code>, the output of the node
             before it, and returns an <code className="font-mono text-fg">Event</code> whose <code className="font-mono text-fg">output</code> goes to
@@ -520,7 +520,7 @@ function DeclareFanOut() {
           </div>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
-              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">The two readers · function nodes</div>
+              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">The readers · function nodes</div>
               <pre className="overflow-x-auto px-4 py-3 font-mono text-[11.5px] leading-relaxed text-fg">
                 <code>{READER_CODE}</code>
               </pre>
@@ -560,7 +560,7 @@ function DeclareFanOut() {
       <In delay={0.35}>
         <EditPanel
           label="Edit 2 of 2"
-          title="Replace the empty list with two chains."
+          title="Replace the empty list with the chains."
           intro={
             <>
               Only the <code className="font-mono text-fg">Workflow</code> is shown. Each chain is a tuple of nodes that run in order;
@@ -849,7 +849,7 @@ function HumanInTheLoop() {
       <In delay={0.2}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">Where the graph stands</p>
-          <h2 className="font-display mt-2 text-2xl">The chain ends at the proposer.</h2>
+          <h2 className="font-display mt-2 text-2xl">The chain ends at propose_directions.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
             After 4c, stage 2 runs the research, joins it, and <code className="font-mono text-fg">propose_directions</code>{" "}
             turns the join's dict into four candidates. The run ends there: the candidates are the workflow's output and nobody is asked
@@ -873,7 +873,7 @@ function HumanInTheLoop() {
         <EditPanel
           label="Edit 1 of 2"
           title="Add direction_gate to the stage 2 chain."
-          intro={<>Only the edge list of the stage 2 app is shown. Append the gate to the last chain, after the proposer.</>}
+          intro={<>Only the edge list of the stage 2 app is shown. Append the gate to the last chain, after propose_directions.</>}
           pill={status ? (gateWired ? "gate in the chain ✓" : `chain: ${status.chain.length ? status.chain.join(" → ") : "none"}`) : "…"}
           ok={gateWired}
           hint={hintA}
@@ -926,7 +926,7 @@ function HumanInTheLoop() {
               <p>
                 Here the payload is <code className="font-mono text-fg">{"{"}"candidates": cands{"}"}</code>.{" "}
                 <code className="font-mono text-fg">cands</code> is the list the first line of the function built: the four candidates the
-                proposer returned, each a plain dict with a title, an angle, and a hook. The line after it writes the same list to
+                propose_directions returned, each a plain dict with a title, an angle, and a hook. The line after it writes the same list to
                 shared state for the next node. Putting it in the payload as well means a frontend can show the four choices next to
                 the form without reading state.
               </p>
@@ -1201,7 +1201,7 @@ function AgentNode() {
       <In delay={0.3}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The pieces</p>
-          <h2 className="font-display mt-2 text-2xl">Four arguments.</h2>
+          <h2 className="font-display mt-2 text-2xl">The arguments of an agent node.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
             <code className="font-mono text-fg">name</code> is the node's name on the map. <code className="font-mono text-fg">model</code> is{" "}
             <code className="font-mono text-fg">config.MODEL</code>, the same Gemini model step 3 used. <code className="font-mono text-fg">instruction</code>{" "}
@@ -1224,7 +1224,7 @@ function AgentNode() {
           </div>
           <p className="mt-4 max-w-3xl text-sm text-fg-muted">
             The schema is the part that matters for the rest of the graph. The model's reply is validated against it, so the node after
-            the proposer receives a <code className="font-mono text-fg">Directions</code> object with exactly four candidates, not free text.
+            propose_directions receives a <code className="font-mono text-fg">Directions</code> object with exactly four candidates, not free text.
             In 4d that node is a pause that shows the four titles to a person.
           </p>
         </section>
@@ -1310,7 +1310,7 @@ function AgentNode() {
           open={open}
           setOpen={setOpen}
           title="Run stage 2 in adk web."
-          intro="The chain ends at the proposer, so each run is one model call and ends with its four candidates as the workflow's output."
+          intro="The chain ends at propose_directions, so each run is one model call and ends with its four candidates as the workflow's output."
           idea={idea}
           setIdea={setIdea}
           steps={[
@@ -1356,10 +1356,13 @@ export function EditPanel({
   symbol,
   pattern,
   onSaved,
+  extra,
 }: {
   label?: string;
   title: string;
   intro: React.ReactNode;
+  /** Shown between the intro and the editor: figures, code to read, a helper button. */
+  extra?: React.ReactNode;
   pill: string;
   ok: boolean;
   hint: number;
@@ -1398,6 +1401,7 @@ export function EditPanel({
           {hint >= 2 && <pre className="mt-2 overflow-x-auto rounded-lg bg-overlay px-3 py-2 font-mono text-[11.5px] text-fg">{hint2}</pre>}
         </div>
       )}
+      {extra && <div className="mt-4">{extra}</div>}
       <div className="mt-4">
         <CodeEditor path={path} symbol={symbol} accent={AMBER} highlightPattern={pattern} onSaved={onSaved} />
       </div>
@@ -1414,6 +1418,8 @@ export function RunPanel({
   idea,
   setIdea,
   steps,
+  stepTitles,
+  frame,
 }: {
   app: string;
   open: boolean;
@@ -1423,14 +1429,20 @@ export function RunPanel({
   idea: string;
   setIdea: (v: string) => void;
   steps: [string, string];
+  /** Titles for the two instruction cards after the idea; default "Watch the run" and "Then". */
+  stepTitles?: [string, string];
+  /** A session to open instead of the app's start page, and a counter that
+   *  reloads the frame each time it changes (the dev UI never re-reads a
+   *  session on its own). */
+  frame?: { url: string; n: number } | null;
 }) {
   const [inspector, setInspector] = useState<InspectorStatus | null>(null);
   useEffect(() => {
     api.labInspector().then(setInspector).catch(() => setInspector({ up: false, url: "/inspector/dev-ui/", apps: [] }));
   }, []);
-  const url = `/inspector/dev-ui/?app=${app}`;
+  const url = frame?.url ?? `/inspector/dev-ui/?app=${app}`;
   return (
-    <section className="rounded-3xl border p-6" style={{ borderColor: tint(BLUE, 0.33), background: tint(BLUE, 0.04) }}>
+    <section id={`run-${app}`} className="rounded-3xl border p-6" style={{ borderColor: tint(BLUE, 0.33), background: tint(BLUE, 0.04) }}>
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: BLUE }}>
@@ -1458,10 +1470,10 @@ export function RunPanel({
           <input value={idea} onChange={(e) => setIdea(e.target.value)} className="mt-2 w-full rounded-lg border border-hairline bg-input px-3 py-2 font-mono text-xs text-fg" placeholder={DEFAULT_IDEA} />
           <CopyLine text={idea.trim() || DEFAULT_IDEA} />
         </Instruction>
-        <Instruction n={2} title="Watch the run">
+        <Instruction n={2} title={stepTitles?.[0] ?? "Watch the run"}>
           <p className="mt-2 text-xs text-fg-muted">{steps[0]}</p>
         </Instruction>
-        <Instruction n={3} title="Then">
+        <Instruction n={3} title={stepTitles?.[1] ?? "Then"}>
           <p className="mt-2 text-xs text-fg-muted">{steps[1]}</p>
         </Instruction>
       </ol>
@@ -1474,7 +1486,26 @@ export function RunPanel({
               open in a new tab <ExternalLink size={12} />
             </a>
           </div>
-          <iframe title="adk web" src={url} className="h-[680px] w-full bg-[#1e1e1e]" />
+          <iframe
+            key={frame?.n ?? 0}
+            title="adk web"
+            src={url}
+            className="h-[680px] w-full bg-[#1e1e1e]"
+            onLoad={() => {
+              // A reloaded frame: the dev UI focuses its chat box while it boots, and the
+              // browser scrolls this page to it. Wait for that scroll (or four seconds),
+              // then put the panel back at the top of the view.
+              if (!frame) return;
+              const y0 = window.scrollY;
+              const t0 = Date.now();
+              const id = setInterval(() => {
+                if (Math.abs(window.scrollY - y0) < 40 && Date.now() - t0 < 4000) return;
+                clearInterval(id);
+                const el = document.getElementById(`run-${app}`);
+                if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 170 });
+              }, 100);
+            }}
+          />
         </div>
       )}
     </section>

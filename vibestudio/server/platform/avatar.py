@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import os
 
-from .agent import config
+from ..agent.platform import config
 from .bus import bus
 from .files import save_profile
 

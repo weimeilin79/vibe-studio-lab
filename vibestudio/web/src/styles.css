@@ -176,3 +176,9 @@ svg.graph { width: 100%; min-width: 760px; max-width: 1080px; margin: 0 auto; he
 }
 
 .notice { border: 1px solid var(--hairline); background: var(--overlay); border-radius: 14px; padding: 12px 16px; font-size: 14.5px; color: var(--fg-muted); }
+
+/* a retry in progress: shown under the header until the next attempt starts */
+.retrybar { display: flex; align-items: center; gap: 12px; margin: 12px 22px 0; padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--amber) 9%, transparent); color: var(--fg); font-size: 14.5px; }
+.retrybar .clock { display: inline-flex; color: var(--amber); }
+.retrybar .mono { color: var(--amber); font-weight: 700; }
+.retrybar .note { display: block; margin-top: 2px; font-size: 13px; }

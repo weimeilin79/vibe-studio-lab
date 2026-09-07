@@ -8,3 +8,5 @@ aiosqlite==0.22.1
 sqlalchemy==2.0.52
 greenlet==3.5.5
 google-auth==2.56.3
+opentelemetry-exporter-otlp-proto-http==1.42.1
+opentelemetry-resourcedetector-gcp>=1.9.0a0,<2

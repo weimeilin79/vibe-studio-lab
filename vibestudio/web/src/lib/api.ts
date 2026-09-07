@@ -73,7 +73,9 @@ export function describe(ev: StudioEvent): string | null {
     case "thumbnail.saved":
       return `thumbnail captured at 2 s · ${d.url}`;
     case "publish.attempt":
-      return `publish · attempt ${d.n} of ${d.of}`;
+      return `publish · attempt ${d.n} of ${d.of}${d.project ? ` · project ${d.project}` : ""}`;
+    case "retry":
+      return `${d.step} · attempt ${d.attempt} of ${d.of} failed · retrying in ${Math.round(Number(d.wait_s))}s${d.detail ? ` · ${d.detail}` : ""}`;
     case "publish.done":
       return `published · ${d.url}`;
     case "publish.needs_confirm":

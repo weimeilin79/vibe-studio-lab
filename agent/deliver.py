@@ -22,7 +22,7 @@ import time
 from google.adk import Runner
 from google.genai.types import Content, FunctionResponse, Part
 
-from . import config, drive, state, videogen
+from .platform import config, drive, state, videogen
 
 APP = os.environ.get("STUDIO_VIDEO_APP", "stage6_video")
 USERS = ["user", config.USER]                 # adk web files its sessions under "user"

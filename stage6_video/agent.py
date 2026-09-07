@@ -9,14 +9,14 @@ from google.adk import Agent, Workflow
 from google.adk.tools import LongRunningFunctionTool
 from google.adk.workflow import START, JoinNode
 
-from agent import config
+from agent.platform import config
 from agent.cleanup_tools import find_policy_hits, suggest_replacement
 from agent.desk import RENDER_INSTRUCTION, render_submit
 from agent.graph import (PROPOSE_INSTRUCTION, QUARANTINE_INSTRUCTION,
                          SCRIPT_INSTRUCTION, direction_gate, persist_direction,
                          policy_check, read_backlog, read_feedback, scan_trends,
                          store_video)
-from agent.memory import recall_taste, remember_pick
+from agent.platform.memory import recall_taste, remember_pick
 from agent.schemas import CleanedDirection, Directions, Script
 
 join_research = JoinNode(name="join_research")

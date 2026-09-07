@@ -10,9 +10,9 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from . import avatar, files, graphinfo, publish
-from .agent import config
-from .bus import bus
+from .platform import avatar, files, graphinfo, publish
+from .agent.platform import config
+from .platform.bus import bus
 from .runner import Busy, studio
 
 router = APIRouter(prefix="/api")
@@ -65,7 +65,7 @@ async def graph():
 
 @router.get("/health")
 async def health():
-    from .agent import memory, rag
+    from .agent.platform import memory, rag
     return {"ok": True, "real_video": config.REAL_VIDEO, "model": config.MODEL,
             "memory_bank": bool(memory.engine_name()), "rag_corpus": bool(rag.corpus_name()),
             "runs_dir": str(config.RUNS)}

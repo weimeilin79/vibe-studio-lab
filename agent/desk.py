@@ -14,7 +14,7 @@ graph continues to store_video, which reads the result from runs/state.json.
 from google.adk import Agent
 from google.adk.tools import LongRunningFunctionTool
 
-from . import config, videogen
+from .platform import config, videogen
 
 
 def render_submit(prompt: str) -> dict:

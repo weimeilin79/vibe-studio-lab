@@ -1,4 +1,4 @@
-"""The app's configuration. Same switches as the lab's agent/config.py, with
+"""The app's configuration. Same switches as the lab's agent/platform/config.py, with
 one difference: where things are.
 
 The app runs in two places. Inside the lab repo, next to the student's work,
@@ -10,7 +10,7 @@ STUDIO_RAG_CORPUS from deploy.sh.
 import os
 import pathlib
 
-HERE = pathlib.Path(__file__).resolve().parent          # vibestudio/server/agent
+HERE = pathlib.Path(__file__).resolve().parents[1]      # vibestudio/server/agent
 APP_ROOT = HERE.parent.parent                             # vibestudio/
 _repo = APP_ROOT.parent
 REPO = _repo if (_repo / "agent" / "graph.py").exists() and (_repo / "checks").exists() else None

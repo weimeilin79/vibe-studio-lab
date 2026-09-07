@@ -234,12 +234,12 @@ function MeaningFigure() {
 
 type RagCmd = "connect" | "load" | "query";
 const RAG_COMMANDS: { cmd: RagCmd; line: string; what: string }[] = [
-  { cmd: "connect", line: "python -m agent.rag", what: "Creates the corpus in your project, once, with text-embedding-005 as its embedding model. Runs again as connect." },
-  { cmd: "load", line: "python -m agent.rag load", what: "Uploads agent/comments.md: the file is split into passages, each passage embedded and stored. About two minutes while the index builds. Rerun it after editing the comments; the previous copy is replaced." },
-  { cmd: "query", line: `python -m agent.rag query "${QUERY}"`, what: "Embeds the question and returns the five passages nearest to it, with their distance. Lower is closer." },
+  { cmd: "connect", line: "python -m agent.platform.rag", what: "Creates the corpus in your project, once, with text-embedding-005 as its embedding model. Runs again as connect." },
+  { cmd: "load", line: "python -m agent.platform.rag load", what: "Uploads agent/comments.md: the file is split into passages, each passage embedded and stored. About two minutes while the index builds. Rerun it after editing the comments; the previous copy is replaced." },
+  { cmd: "query", line: `python -m agent.platform.rag query "${QUERY}"`, what: "Embeds the question and returns the five passages nearest to it, with their distance. Lower is closer." },
 ];
 
-/** The corpus commands, run here as the same `python -m agent.rag` process a
+/** The corpus commands, run here as the same `python -m agent.platform.rag` process a
  *  terminal would start. Output streams in as it is printed. */
 function RagRunner({ onDone }: { onDone: () => void }) {
   const [lines, setLines] = useState<string[]>([]);
@@ -283,7 +283,7 @@ function RagRunner({ onDone }: { onDone: () => void }) {
     setRunning(true);
     if (cmd !== "query") setOverlay(cmd);
   };
-  const lineFor = (c: (typeof RAG_COMMANDS)[number]) => (c.cmd === "query" ? `python -m agent.rag query "${query}"` : c.line);
+  const lineFor = (c: (typeof RAG_COMMANDS)[number]) => (c.cmd === "query" ? `python -m agent.platform.rag query "${query}"` : c.line);
   return (
     <>
       <AnimatePresence>
@@ -325,7 +325,7 @@ function RagRunner({ onDone }: { onDone: () => void }) {
       {(lines.length > 0 || running) && (
         <div className="mt-4 overflow-hidden rounded-2xl border border-hairline bg-input">
           <div className="flex items-center justify-between border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-            <span>python -m agent.rag · output</span>
+            <span>python -m agent.platform.rag · output</span>
             <span>{running ? "running…" : exit === 0 ? "done" : exit === null ? "" : `exit ${exit}`}</span>
           </div>
           <pre className="max-h-80 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
@@ -357,7 +357,7 @@ function RagOverlay({ cmd, lines, running, exit, onClose }: { cmd: RagCmd; lines
         <div className="flex items-center justify-between border-b border-hairline px-5 py-3">
           <div className="flex items-center gap-3">
             {!done && <RefreshCw size={14} className="animate-spin" style={{ color: CYAN }} />}
-            <span className="font-mono text-xs text-fg">{cmd === "connect" ? "python -m agent.rag" : "python -m agent.rag load"}</span>
+            <span className="font-mono text-xs text-fg">{cmd === "connect" ? "python -m agent.platform.rag" : "python -m agent.platform.rag load"}</span>
           </div>
           <span className="font-mono text-[11px]" style={{ color: failed ? RED : done ? GREEN : "var(--fg-muted)" }}>
             {done ? (failed ? `exited with ${exit}` : "done") : "running on this server…"}
@@ -379,7 +379,7 @@ function RagOverlay({ cmd, lines, running, exit, onClose }: { cmd: RagCmd; lines
   );
 }
 
-/** `python -m agent.rag`: a RAG Engine corpus appears in the project with an
+/** `python -m agent.platform.rag`: a RAG Engine corpus appears in the project with an
  *  embedding model attached. The motion repeats while the command runs. */
 function CreateAnimation({ lines, done }: { lines: string[]; done: boolean }) {
   const text = lines.join("\n");
@@ -414,7 +414,7 @@ function CreateAnimation({ lines, done }: { lines: string[]; done: boolean }) {
   );
 }
 
-/** `python -m agent.rag load`: comments.md is split into passages, each passage
+/** `python -m agent.platform.rag load`: comments.md is split into passages, each passage
  *  is embedded and stored, then a probe query proves the index answers.
  *  Progress follows the output lines. */
 function LoadAnimation({ lines, done }: { lines: string[]; done: boolean }) {
@@ -528,7 +528,7 @@ function CorpusLedger({ refreshKey = 0 }: { refreshKey?: number }) {
 
 /* ───────────────────────── 7a ───────────────────────── */
 
-const CODE_CORPUS = `# agent/rag.py
+const CODE_CORPUS = `# agent/platform/rag.py
 corpus = rag.create_corpus(
     display_name="vibestudio-feedback",
     description="Vibe Studio: what the audience wrote under the channel's past videos.",
@@ -542,13 +542,13 @@ rag.upload_file(
     transformation_config=rag.TransformationConfig(
         chunking_config=rag.ChunkingConfig(chunk_size=120, chunk_overlap=20)))`;
 
-const CODE_RETRIEVE = `# agent/rag.py
+const CODE_RETRIEVE = `# agent/platform/rag.py
 def retrieve(query: str, k: int = TOP_K) -> list[dict]:
     """The k passages nearest to \`query\`: embed the question, find the nearest
     vectors, return their text. Each row: text, score, source."""
     name = corpus_name()
     if not name:
-        raise RuntimeError("no corpus connected - run: python -m agent.rag")
+        raise RuntimeError("no corpus connected - run: python -m agent.platform.rag")
     rag = _rag()
     resp = rag.retrieval_query(
         rag_resources=[rag.RagResource(rag_corpus=name)], text=query,
@@ -704,7 +704,7 @@ function TheCorpus() {
       <In delay={0.1}>
         <section className="rounded-3xl border border-hairline bg-card p-6">
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">Knowledge base</p>
-          <h2 className="font-display mt-2 text-2xl">Three places a run can draw from.</h2>
+          <h2 className="font-display mt-2 text-2xl">Where a run can draw from.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
             State holds what one run knows: the candidates, the pick, the render. Memory Bank holds facts about a person, consolidated: three
             sessions about cats become one fact about cats. RAG Engine holds what people wrote, verbatim, and finds the passages that fit a
@@ -758,7 +758,7 @@ function TheCorpus() {
           </p>
           <PlatformFigure />
           <div className="mt-4 overflow-hidden rounded-2xl border border-hairline bg-input">
-            <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/rag.py · create the corpus, upload the file</div>
+            <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/platform/rag.py · create the corpus, upload the file</div>
             <pre className="overflow-x-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
               <code>{CODE_CORPUS}</code>
             </pre>
@@ -777,12 +777,12 @@ function TheCorpus() {
           <h2 className="font-display mt-2 text-2xl">Ask, get passages back.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
             One call. The question is embedded with the corpus's model, the store finds the nearest vectors, and their passages come back with a
-            distance each; lower is closer. <code className="font-mono text-fg">retrieve</code> in <code className="font-mono text-fg">agent/rag.py</code>{" "}
+            distance each; lower is closer. <code className="font-mono text-fg">retrieve</code> in <code className="font-mono text-fg">agent/platform/rag.py</code>{" "}
             wraps the call and returns rows of text, score, and source. The workflow calls it in 7b.
           </p>
           <RetrieveFigure />
           <div className="mt-4 overflow-hidden rounded-2xl border border-hairline bg-input">
-            <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/rag.py · retrieve</div>
+            <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/platform/rag.py · retrieve</div>
             <pre className="max-h-72 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
               <code>{CODE_RETRIEVE}</code>
             </pre>
@@ -803,7 +803,7 @@ function TheCorpus() {
           </p>
           <RagRunner onDone={() => setTick((t) => t + 1)} />
           <div className="flex flex-wrap gap-3">
-            <SourceToggle path="agent/rag.py" label="agent/rag.py · the client and the console" />
+            <SourceToggle path="agent/platform/rag.py" label="agent/platform/rag.py · the client and the console" />
             <SourceToggle path="agent/comments.md" label="agent/comments.md · the thirty comments" />
           </div>
         </section>
@@ -830,7 +830,7 @@ def read_feedback(node_input):
     except Exception as e:
         print(f"  [rag] feedback unavailable ({str(e)[:80]})")
         return Event(output={"query": query, "feedback": [],
-                             "note": "no corpus connected - run: python -m agent.rag"})
+                             "note": "no corpus connected - run: python -m agent.platform.rag"})
     return Event(output={"query": query, "feedback": [h["text"] for h in hits]})`;
 
 const CODE_INSTRUCTION = `# agent/graph.py · PROPOSE_INSTRUCTION, the lines about the third key
@@ -1027,8 +1027,8 @@ function TheReader() {
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The graph</p>
           <h2 className="font-display mt-2 text-2xl">A third reader in the fan-out.</h2>
           <p className="mt-2 max-w-3xl text-sm text-fg-muted">
-            Research that produces data before the proposer runs belongs in the fan-out, next to the trends and the backlog. One edge from START
-            into the join adds the reader; the join waits for all three and hands the proposer a bundle with a third key.
+            Research that produces data before propose_directions runs belongs in the fan-out, next to the trends and the backlog. One edge from START
+            into the join adds the reader; the join waits for all three and hands propose_directions a bundle with a third key.
           </p>
           <WorkflowFigure />
         </section>
@@ -1052,14 +1052,14 @@ function TheReader() {
               </pre>
             </div>
             <div className="overflow-hidden rounded-2xl border border-hairline bg-input">
-              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/rag.py · retrieve</div>
+              <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/platform/rag.py · retrieve</div>
               <pre className="max-h-80 overflow-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
                 <code>{CODE_RETRIEVE}</code>
               </pre>
             </div>
           </div>
           <div className="mt-4 overflow-hidden rounded-2xl border border-hairline bg-input">
-            <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/graph.py · what the proposer is told about the new key</div>
+            <div className="border-b border-hairline px-4 py-1.5 font-mono text-[10px] uppercase tracking-wider text-fg-muted">agent/graph.py · what propose_directions is told about the new key</div>
             <pre className="overflow-x-auto px-4 py-3 font-mono text-[11px] leading-relaxed text-fg">
               <code>{CODE_INSTRUCTION}</code>
             </pre>
@@ -1107,12 +1107,12 @@ function TheReader() {
           open={open}
           setOpen={setOpen}
           title="Run it with an idea, then read the bundle."
-          intro="Send an idea close to something viewers commented on. The proposer's candidates now come from three sources, and the model decides how to weigh them: the same idea gives different candidates on different runs. Compare the lean, not the titles."
+          intro="Send an idea close to something viewers commented on. The candidates of propose_directions now come from three sources, and the model decides how to weigh them: the same idea gives different candidates on different runs. Compare the lean, not the titles."
           idea={idea}
           setIdea={setIdea}
           steps={[
             "Open the read_feedback event: the query is your idea, and the output holds the five passages nearest to it. Open join_research: the bundle has a third key. Then open propose_directions: candidates 1 to 3 lean toward what viewers praised and away from what they complained about, and their evidence cites feedback. The wording varies run to run.",
-            "Pick one and let the run finish. Then run the same idea again and compare: the passages are the same, the candidates are not. Retrieval is deterministic; the proposer is a model.",
+            "Pick one and let the run finish. Then run the same idea again and compare: the passages are the same, the candidates are not. Retrieval is deterministic; propose_directions is a model.",
           ]}
         />
       </In>

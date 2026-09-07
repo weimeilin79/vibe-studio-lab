@@ -1,10 +1,10 @@
-"""`python -m agent.bank` - the creator's Memory Bank, from the console.
+"""`python -m agent.platform.bank` - the creator's Memory Bank, from the console.
 
-  python -m agent.bank            create the bank in your project (once), or connect
-  python -m agent.bank load       seed the creator's history: three eras of picks
-  python -m agent.bank list       what the bank holds, oldest first
-  python -m agent.bank forget ID  delete one memory
-  python -m agent.bank reset      delete every memory in the creator's scope
+  python -m agent.platform.bank            create the bank in your project (once), or connect
+  python -m agent.platform.bank load       seed the creator's history: three eras of picks
+  python -m agent.platform.bank list       what the bank holds, oldest first
+  python -m agent.platform.bank forget ID  delete one memory
+  python -m agent.platform.bank reset      delete every memory in the creator's scope
 
 The bank lives on an Agent Engine resource in your project. Its name is cached
 in runs/memorybank.json; that file is the connection.
@@ -66,7 +66,7 @@ def connect():
 
 def load():
     if not memory.engine_name():
-        print("no Memory Bank yet - run: python -m agent.bank"); return
+        print("no Memory Bank yet - run: python -m agent.platform.bank"); return
     print(f"── loading {len(HISTORY)} past sessions, oldest first (each is one generate call) ──")
     failed = []
     for i, text in enumerate(HISTORY, 1):
@@ -82,7 +82,7 @@ def load():
     print("── consolidated ──")
     _print(memory.list_all())
     if failed:
-        print(f"sessions that did not load: {failed} - run `python -m agent.bank load` again "
+        print(f"sessions that did not load: {failed} - run `python -m agent.platform.bank load` again "
               "later; consolidation makes repeats harmless")
 
 

@@ -84,7 +84,7 @@ const JOBS = [
 
 const CODE_AGENT = `# stage0_prompt/agent.py
 from google.adk import Agent
-from agent import config
+from agent.platform import config
 
 root_agent = Agent(
     name="solo_channel", model=config.MODEL,     # model: gemini-3-flash-preview
@@ -122,7 +122,7 @@ function TheAgent() {
               <Chip color={PURPLE}>tools = [ ]</Chip>
             </div>
             <p className="mt-5 text-sm text-fg-muted">
-              <b className="text-fg">model</b> is set once for the lab in <code className="font-mono">agent/config.py</code>.
+              <b className="text-fg">model</b> is set once for the lab in <code className="font-mono">agent/platform/config.py</code>.
               adk web discovers this agent because the folder contains an <code className="font-mono">agent.py</code>{" "}
               that exports <code className="font-mono">root_agent</code>; the folder name becomes the app name.
             </p>
@@ -192,7 +192,7 @@ function Sources() {
   }, [loadTrends]);
   return (
     <section className="rounded-3xl border border-hairline bg-card p-6">
-      <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The two sources</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-fg-muted">The sources</p>
       <h2 className="font-display mt-2 text-2xl">The backlog, and what is trending.</h2>
       <p className="mt-2 max-w-3xl text-sm text-fg-muted">
         The creator keeps a backlog: ideas noted down to make someday, one per line in{" "}
@@ -301,7 +301,7 @@ function ToolsEditRun() {
       <StepHeader
         kicker="Step 3c · Tools, edit, run"
         color={BLUE}
-        title="Two Python functions, one HTTP contract."
+        title="Python functions behind an HTTP contract."
         blurb="Give the agent its two research tools, run it in adk web, and check from the session store what it actually did."
       />
 
@@ -379,7 +379,7 @@ function ToolsEditRun() {
               <p className="font-mono text-[11px] uppercase tracking-[0.3em]" style={{ color: AMBER }}>
                 Your edit
               </p>
-              <h2 className="font-display mt-2 text-2xl">Add the two tools to the agent.</h2>
+              <h2 className="font-display mt-2 text-2xl">Add the tools to the agent.</h2>
               <p className="mt-2 max-w-2xl text-sm text-fg-muted">
                 The highlighted line has an empty <code className="font-mono text-fg">tools=[]</code>. Put the two
                 functions defined above it into that list. Saving writes the file; adk web reloads the agent on the next message.

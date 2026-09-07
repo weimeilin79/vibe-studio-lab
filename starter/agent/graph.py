@@ -8,7 +8,7 @@
 
 The graph pauses for PEOPLE (the form) and refuses with a ROUTER (the policy)
 BEFORE any money is spent. Memory (step 6) is not a node: it is two callbacks
-on the agents, in agent/memory.py.
+on the agents, in agent/platform/memory.py.
 """
 import json
 import pathlib
@@ -18,7 +18,7 @@ from google.adk import Agent, Event, Workflow
 from google.adk.events.request_input import RequestInput
 from google.adk.workflow import START, JoinNode
 
-from . import config, state
+from .platform import config, state
 from .cleanup_tools import find_policy_hits, suggest_replacement
 from .desk import render_desk
 from .schemas import CleanedDirection, Directions, Script
@@ -56,7 +56,7 @@ def read_backlog(node_input):
 def read_feedback(node_input):
     """The third reader (step 7): what the audience wrote under past videos,
     the passages nearest to tonight's idea. Retrieval, not a model call."""
-    from . import rag
+    from .platform import rag
     idea = idea_text(node_input)
     query = idea or "what viewers liked and what they complained about"
     try:
@@ -64,7 +64,7 @@ def read_feedback(node_input):
     except Exception as e:
         print(f"  [rag] feedback unavailable ({str(e)[:80]})")
         return Event(output={"query": query, "feedback": [],
-                             "note": "no corpus connected - run: python -m agent.rag"})
+                             "note": "no corpus connected - run: python -m agent.platform.rag"})
     return Event(output={"query": query, "feedback": [h["text"] for h in hits]})
 
 
@@ -127,18 +127,15 @@ propose_directions = Agent(
 def direction_gate(node_input: Directions):
     cands = [c.model_dump() for c in node_input.candidates]
     yield Event(state={"candidates": cands})
-    st = state.load()
-    st["candidates"] = cands                             # driver clipboard copy
-    state.save(st)
     # TODO: GATE_INPUT - suspend the graph here: yield a RequestInput with a message,
     # a response_schema (the form: one field, pick) and payload={"candidates": cands}
 
 
-def persist_direction(node_input, candidates: list = [], constraints: str = ""):
+def persist_direction(node_input, candidates: list = []):
     """Resolve the human's pick into THE direction, and write it to shared state.
 
-    `candidates` and `constraints` are not passed by anyone: ADK binds them from
-    shared state because the parameter names match state keys. The pick comes
+    `candidates` is not passed by anyone: ADK binds it from shared state
+    because the parameter name matches a state key. The pick comes
     in as node_input, the gate's answer. A human door must degrade to a
     sensible choice, never raise: a null, missing, blank, or out-of-range pick
     resolves to candidate 1."""
@@ -151,21 +148,8 @@ def persist_direction(node_input, candidates: list = [], constraints: str = ""):
     else:
         chosen = {"title": "untitled", "angle": "", "evidence": []}
     hook = chosen.get("hook") or " ".join(chosen["title"].split()[:4])
-    # TODO: PERSIST_STATE - yield an Event whose state holds direction, angle, hook, constraints, and user:prefs
-    _record_brief(chosen, hook)
+    # TODO: PERSIST_STATE - yield an Event whose state holds direction, angle, hook, and user:prefs
     yield Event(output=chosen)
-
-
-def _record_brief(chosen: dict, hook: str) -> None:
-    """The driver's copy, in runs/state.json: the file the run shares with
-    code outside ADK. The delivery writes the render there in step 8, and
-    the app reads it after the run."""
-    st = state.load()
-    st["brief"] = {"topic": chosen["title"], "angle": chosen.get("angle", ""),
-                   "hook": hook, "evidence": chosen.get("evidence", [])}
-    st["direction"] = chosen["title"]
-    st["hook"] = hook
-    state.save(st)
 
 
 # ── the policy gate · a deterministic router, BEFORE any money is spent ─────
@@ -197,15 +181,13 @@ def policy_check(node_input):
 SCRIPT_INSTRUCTION = (
     "Write the production script for the approved video direction. The message "
     "you received is the direction as JSON: title, angle, hook, style.\n"
-    "Channel constraints: {constraints}\n"
     "Deliver: title (<=60 chars, honoring the direction), description "
     "(1-2 sentences), 3-5 tags, an opening_line, EXACTLY 3 shots (each one "
     "visual sentence for a render model, written in the direction's style), "
     "and style: the direction's style, copied through, or a fitting look of "
     "your own if the direction has none.\n"
-    "If constraints include a conclusion-first rule, opening_line must state "
-    "the final outcome outright, and only then set conclusion_first=true. "
-    "Never claim conclusion_first for a teaser or a question.")
+    "Set conclusion_first=true only when the opening_line states the final "
+    "outcome outright, never for a teaser or a question.")
 
 scripter = Agent(
     name="scripter",

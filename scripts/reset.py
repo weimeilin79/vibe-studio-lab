@@ -17,7 +17,7 @@ ARCHIVE = RUNS / "archive"
 
 # What a run leaves on disk. Everything here is written by a run and is stale
 # the moment the next one starts:
-#   state.json      the driver's copy of the run (the brief, the script, the render)
+#   state.json      the run's file outside ADK (the delivered render, the memory flags)
 #   sessions.db     the ADK session store the stage apps and adk web write
 #   ui_last.json    how the last console worker exited
 #   *_run.log       the console workers' output
@@ -45,7 +45,7 @@ USER_PREFIX = "user:"
 
 
 def _drive():
-    """agent.drive, or None if it will not import.
+    """agent.platform.drive, or None if it will not import.
 
     Imported HERE and not at module scope for two reasons: app/main.py imports
     this module while the server is booting, and - more to the point - clearing
@@ -61,7 +61,7 @@ def _drive():
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
     try:
-        from agent import drive
+        from agent.platform import drive
         return drive
     except Exception:
         return None
@@ -90,7 +90,7 @@ def read_user_state() -> dict[str, dict]:
     drive = _drive()
     if drive is None:
         return {}
-    from agent import config
+    from agent.platform import config
 
     async def _read() -> dict[str, dict]:
         svc = drive.svc()
@@ -132,7 +132,7 @@ def write_user_state(carried: dict[str, dict]) -> list[str]:
     drive = _drive()
     if drive is None or not carried:
         return []
-    from agent import config
+    from agent.platform import config
 
     async def _write() -> list[str]:
         svc = drive.svc()

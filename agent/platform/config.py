@@ -2,7 +2,7 @@
 import os
 import pathlib
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]      # agent/platform/config.py -> the repo
 RUNS = ROOT / "runs"
 RUNS.mkdir(exist_ok=True)
 
@@ -38,5 +38,5 @@ USER = "creator"
 STATE = RUNS / "state.json"
 # the video: ONE real Veo clip per lap by default (a minute or three), or a
 # prebaked stand-in (STUDIO_REAL_VIDEO=0) for a no-cost run. Retries, interval
-# and timeout live in agent/videogen.py
+# and timeout live in agent/platform/videogen.py
 REAL_VIDEO = os.environ.get("STUDIO_REAL_VIDEO", "1").lower() in ("1", "true")

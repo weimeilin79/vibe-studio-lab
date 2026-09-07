@@ -9,7 +9,7 @@ import ast
 
 from fastapi import APIRouter, HTTPException
 
-from agent import config
+from agent.platform import config
 
 from ..schemas import CodeFile, CodeWrite
 from ..services import reload as agent_reload
@@ -26,15 +26,15 @@ FILES = {
     "stage4_memory/agent.py": (True, "step 6: the same graph with memory callbacks"),
     "stage5_rag/agent.py": (True, "step 7: the same graph with a third reader"),
     "agent/comments.md": (True, "The audience's comments: the RAG Engine corpus"),
-    "agent/rag.py": (False, "The RAG Engine client and console: corpus, load, retrieve"),
+    "agent/platform/rag.py": (False, "The RAG Engine client and console: corpus, load, retrieve"),
     "stage6_video/agent.py": (True, "step 8: the same graph with the render desk"),
     "agent/desk.py": (False, "The render desk: render_submit and the LongRunningFunctionTool"),
     "agent/deliver.py": (True, "The delivery console: find the pending call, wait for Veo, answer by id"),
-    "agent/videogen.py": (False, "Veo: one script in, one clip out, with retries"),
+    "agent/platform/videogen.py": (False, "Veo: one script in, one clip out, with retries"),
     "agent/graph.py": (True, "The workflow: direction_gate (RequestInput) and the edge list (two TODO edges)"),
     "agent/backlog.txt": (True, "The creator's backlog: one idea per line"),
-    "agent/bank.py": (False, "The Memory Bank console: create, load, list"),
-    "agent/memory.py": (False, "The Memory Bank client and the two callbacks"),
+    "agent/platform/bank.py": (False, "The Memory Bank console: create, load, list"),
+    "agent/platform/memory.py": (False, "The Memory Bank client and the two callbacks"),
     "agent/policy_words.txt": (True, "The policy gate's word list, read at decision time"),
 }
 
