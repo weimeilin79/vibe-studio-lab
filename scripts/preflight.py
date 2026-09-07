@@ -68,5 +68,42 @@ for app in ("stage0_prompt", "stage1_fanout", "stage2_direction", "stage3_router
     except Exception as e:
         tick(f"{app} loads", False, str(e)[:70])
 
+# ── the tools and the services the lab calls ────────────────────────────────
+import shutil
+import subprocess
+import urllib.request
+
+tick("node and npm (build the learning center's page)", bool(shutil.which("node") and shutil.which("npm")),
+     "Cloud Shell has them; on a laptop install Node 20 or newer")
+tick("learning center page built (web/dist)", (ROOT / "web" / "dist" / "index.html").exists(),
+     "./setup_codelab.sh   (or: cd web && npm install && npm run build)")
+
+project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
+if shutil.which("gcloud") and project:
+    try:
+        out = subprocess.run(["gcloud", "services", "list", "--enabled", f"--project={project}", "--format=value(config.name)"],
+                             capture_output=True, text=True, timeout=60).stdout.split()
+        for api, what in (("aiplatform.googleapis.com", "Gemini, Veo, Memory Bank, RAG Engine"), ("run.googleapis.com", "Cloud Run"),
+                          ("cloudbuild.googleapis.com", "Cloud Build"), ("artifactregistry.googleapis.com", "Artifact Registry"),
+                          ("cloudtrace.googleapis.com", "Cloud Trace")):
+            tick(f"{api} enabled ({what})", api in out, f"gcloud services enable {api} --project={project}   (./setup_codelab.sh does this)")
+    except Exception as e:
+        tick("APIs enabled", False, f"could not list services: {str(e)[:60]}")
+else:
+    tick("APIs enabled", False, "gcloud and GOOGLE_CLOUD_PROJECT are needed to check; run ./setup_project.sh then ./setup_codelab.sh")
+
+port = os.environ.get("PORT", "4600")
+try:
+    with urllib.request.urlopen(f"http://localhost:{port}/api/lab/inspector", timeout=3) as r:
+        up = r.status == 200
+except Exception:
+    up = False
+tick(f"learning center running on port {port}", up, "./setup_codelab.sh starts it in the background; or scripts/start.sh")
+
 print("\nPREFLIGHT " + ("GREEN" if ok else "NOT READY - fix the ✗ lines above"))
+if up:
+    # Cloud Shell exposes WEB_HOST for its web preview; elsewhere localhost is the link
+    host = os.environ.get("WEB_HOST", "")
+    link = f"https://{port}-{host}/step/story" if host else f"http://localhost:{port}/step/story"
+    print(f"\nOpen step 1 here:  {link}")
 sys.exit(0 if ok else 1)

@@ -36,7 +36,7 @@ def _file(url: str):
     """A /static/... URL back to the file under runs/media."""
     if not url or not url.startswith("/static/"):
         return None
-    path = config.MEDIA / url.removeprefix("/static/")
+    path = config.MEDIA / url.split("?", 1)[0].removeprefix("/static/")   # the avatar URL carries ?v=<mtime> for the browser cache
     return path if path.exists() else None
 
 

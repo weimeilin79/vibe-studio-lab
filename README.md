@@ -27,12 +27,11 @@ with in-page editors, runners and verify panels) are served by
 ```bash
 git clone https://github.com/weimeilin79/vibe-studio-lab
 cd vibe-studio-lab
-uv sync
-source .venv/bin/activate
-cp .env.example .env            # STUDIO_VERTEX=1 and your project, or an AI Studio key
-python scripts/preflight.py
-scripts/start.sh                # the learning center on http://localhost:4600
+./setup_project.sh              # a Google Cloud project with billing, recorded in ~/project_id.txt
+./setup_codelab.sh              # uv + deps, the APIs, .env, one model call, then the learning center in the background on :4600
 ```
+
+Both scripts can be run again; the second keeps the answers you gave before. It ends with `python scripts/preflight.py`, whose last line is the link to step 1. `kill $(cat runs/lab.pid)` stops the learning center and `scripts/start.sh` starts it again.
 
 Steps 6 to 9 need a Google Cloud project with GEAP enabled (Cloud Shell
 already has credentials): Memory Bank, RAG Engine, Veo, and Cloud Run.
