@@ -4,7 +4,7 @@ id: vibestudio
 categories: adk,agents,memory-bank,rag-engine,gemini,veo
 environments: Web
 status: Draft
-feedback link: https://github.com/cuppibla/vibe-studio-lab/issues
+feedback link: https://github.com/gca-americas/vibestub-studio/issues
 
 # Agentic workflow with ADK
 
@@ -71,7 +71,7 @@ You need a Google Cloud project with billing enabled and the gcloud CLI authenti
 Open the Cloud Shell terminal. This codelab calls it **tab 1**. Clone the repository and run the two setup scripts in order.
 
 ```console
-git clone https://github.com/cuppibla/vibe-studio-lab
+git clone https://github.com/gca-americas/vibestub-studio
 cd ~/vibe-studio-lab
 ./setup_project.sh
 ./setup_codelab.sh
